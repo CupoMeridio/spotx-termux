@@ -177,6 +177,7 @@ cat << 'RUNNER' > /usr/local/bin/spotify-termux
 # ==============================================================================
 export DISPLAY="${DISPLAY:-:0}"
 export PULSE_SERVER="${PULSE_SERVER:-127.0.0.1}"
+export PULSE_LATENCY_MSEC=60
 
 # Critical flags for Electron/Chromium in PRoot user-space:
 FLAGS=(

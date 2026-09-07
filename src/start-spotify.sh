@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# start-spotify.sh - Termux host launcher for SpotX Spotify
+# start-spotify.sh - Termux host launcher for SpotX Spotify on real Android hardware
 # ==============================================================================
 set -e
 
@@ -12,7 +12,12 @@ CYAN='\033[0;36m'
 YELLOW='\033[0;33m'
 RED='\033[0;31m'
 
-echo -e "${CYAN}${BOLD}[*] Launching SpotX Spotify on Termux...${CLR}"
+echo -e "${CYAN}${BOLD}[*] Launching SpotX Spotify on Android Termux...${CLR}"
+
+# 0. Acquire Termux Wake-Lock to prevent Android CPU sleep when screen is off
+if command -v termux-wake-lock > /dev/null 2>&1; then
+    termux-wake-lock 2>/dev/null || true
+fi
 
 TERMUX_TMP="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
 
