@@ -109,7 +109,7 @@ fi
 chmod +x "$CONTAINER_SETUP_STAGING"
 
 info "Executing container guest configuration..."
-proot-distro login "$CONTAINER_NAME" --shared-tmp -- /tmp/spotx-guest-setup.sh
+proot-distro login "$CONTAINER_NAME" --shared-tmp -- bash /tmp/spotx-guest-setup.sh
 rm -f "$CONTAINER_SETUP_STAGING"
 
 # 5. Install launcher scripts on Termux host
@@ -135,6 +135,24 @@ exec "$HOME/start-spotify.sh" "$@"
 RUN_CMD
 chmod +x "$COMMAND_BIN"
 
+# Install updater script and wrapper
+UPDATE_SCRIPT_LOCAL="${SCRIPT_DIR}/src/update-spotify.sh"
+UPDATE_SCRIPT_DEST="${HOME}/update-spotify.sh"
+UPDATE_BIN="${BIN_DIR}/spotify-update"
+
+if [ -f "$UPDATE_SCRIPT_LOCAL" ]; then
+    cp "$UPDATE_SCRIPT_LOCAL" "$UPDATE_SCRIPT_DEST"
+else
+    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/update-spotify.sh" -o "$UPDATE_SCRIPT_DEST"
+fi
+chmod +x "$UPDATE_SCRIPT_DEST"
+
+cat << 'UPDATE_CMD' > "$UPDATE_BIN"
+#!/usr/bin/env bash
+exec "$HOME/update-spotify.sh" "$@"
+UPDATE_CMD
+chmod +x "$UPDATE_BIN"
+
 # Termux:Widget shortcut support (pre-creates ~/.shortcuts directory)
 SHORTCUTS_DIR="${HOME}/.shortcuts"
 mkdir -p "$SHORTCUTS_DIR"
@@ -152,8 +170,8 @@ echo -e "${CYAN}How to run Spotify SpotX:${CLR}"
 echo -e "  1. Make sure you have installed the ${BOLD}Termux-X11 APK${CLR} on your Android device."
 echo -e "     (Download: https://github.com/termux/termux-x11/releases)"
 echo -e "  2. In Termux, simply type:"
-echo -e "     ${BOLD}${GREEN}spotify${CLR}"
-echo -e "     or: ${BOLD}${GREEN}./start-spotify.sh${CLR}"
+echo -e "     ${BOLD}${GREEN}spotify${CLR}         - Avvia Spotify SpotX"
+echo -e "     ${BOLD}${GREEN}spotify-update${CLR}  - Aggiorna Spotify o ri-applica la patch SpotX"
 echo -e "  3. Or tap the ${BOLD}Spotify${CLR} widget on your home screen via Termux:Widget."
 echo
 echo -e "${YELLOW}Tips for the best experience:${CLR}"

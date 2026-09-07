@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # guest-setup.sh - Configuration script inside PRoot Ubuntu container
+# Supports idempotent re-execution and environment-driven modes:
+#   SPOTX_CHECK_ONLY=1  — print version info and exit without changes
+#   SPOTX_ONLY=1        — skip Spotify client update, re-apply SpotX patch only
+#   SPOTX_SKIP=1        — skip SpotX patch application
 # ==============================================================================
 set -euo pipefail
 
@@ -17,6 +21,8 @@ success() { echo -e "${GREEN}${BOLD}[SUCCESS]${CLR} $*"; }
 warn()    { echo -e "${YELLOW}${BOLD}[WARNING]${CLR} $*"; }
 error()   { echo -e "${RED}${BOLD}[ERROR]${CLR} $*" >&2; }
 
+VERSION_MARKER="/usr/share/spotify/.spotx-termux-version"
+
 echo -e "${CYAN}======================================================${CLR}"
 echo -e "${CYAN}${BOLD}   SpotX Termux - Container Guest Setup (PRoot)       ${CLR}"
 echo -e "${CYAN}======================================================${CLR}"
@@ -26,7 +32,69 @@ export DEBIAN_FRONTEND=noninteractive
 ARCH="$(uname -m)"
 info "Detected architecture inside container: ${ARCH}"
 
+# ---------------------------------------------------------------------------
+# Helper: resolve latest Spotify version and package path from APT metadata
+# Sets: LATEST_VER, PKG_PATH, PKG_SHA256
+# ---------------------------------------------------------------------------
+resolve_latest_spotify() {
+    PACKAGES_DATA=$(curl -sSL https://repository.spotify.com/dists/stable/non-free/binary-amd64/Packages)
+    PKG_PATH=$(awk '/^Package: spotify-client$/{p=1} p && /^Filename:/{print $2; exit}' <<< "$PACKAGES_DATA")
+    LATEST_VER=$(awk '/^Package: spotify-client$/{p=1} p && /^Version:/{print $2; exit}' <<< "$PACKAGES_DATA")
+    PKG_SHA256=$(awk '/^Package: spotify-client$/{p=1} p && /^SHA256:/{print $2; exit}' <<< "$PACKAGES_DATA")
+}
+
+# ---------------------------------------------------------------------------
+# Helper: read installed version from marker file
+# Sets: INSTALLED_VER
+# ---------------------------------------------------------------------------
+read_installed_version() {
+    INSTALLED_VER=""
+    if [ -f "$VERSION_MARKER" ]; then
+        INSTALLED_VER=$(cat "$VERSION_MARKER" 2>/dev/null || true)
+    elif command -v dpkg-query > /dev/null 2>&1; then
+        INSTALLED_VER=$(dpkg-query -W -f='${Version}' spotify-client 2>/dev/null || true)
+    fi
+}
+
+# ===========================================================================
+# CHECK-ONLY MODE: print versions and exit
+# ===========================================================================
+if [ "${SPOTX_CHECK_ONLY:-}" = "1" ]; then
+    read_installed_version
+    resolve_latest_spotify
+
+    echo
+    if [ -n "$INSTALLED_VER" ]; then
+        echo -e "  Installed Spotify version: ${GREEN}${BOLD}${INSTALLED_VER}${CLR}"
+    else
+        echo -e "  Installed Spotify version: ${RED}${BOLD}not installed${CLR}"
+    fi
+    echo -e "  Latest available version:  ${CYAN}${BOLD}${LATEST_VER:-unknown}${CLR}"
+
+    if [ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" = "${LATEST_VER:-}" ]; then
+        echo -e "  Status: ${GREEN}${BOLD}up-to-date ✔${CLR}"
+    else
+        echo -e "  Status: ${YELLOW}${BOLD}update available${CLR}"
+    fi
+
+    SPOTX_APPLIED="no"
+    if [ -f /usr/share/spotify/Apps/xpui.spa ]; then
+        # Check for SpotX marker inside xpui.spa
+        if unzip -p /usr/share/spotify/Apps/xpui.spa xpui.js 2>/dev/null | grep -Fq "SpotX"; then
+            SPOTX_APPLIED="yes"
+        fi
+    fi
+    echo -e "  SpotX patch applied:       ${BOLD}${SPOTX_APPLIED}${CLR}"
+    echo
+    exit 0
+fi
+
+# ===========================================================================
+# FULL / UPDATE INSTALLATION
+# ===========================================================================
+
 # 1. Update APT lists and install fundamental utilities
+# (apt-get install is inherently idempotent — fast if packages exist)
 info "Updating container package sources..."
 apt-get update -y
 
@@ -74,57 +142,110 @@ apt-get install -y --no-install-recommends libudev1 2>/dev/null || true
 # 3. Handle architecture-specific Spotify setup
 case "$ARCH" in
     x86_64|amd64)
-        info "Running on native x86_64. Configuring Spotify official APT repository..."
-        mkdir -p /etc/apt/trusted.gpg.d /etc/apt/sources.list.d
-        curl -sS https://download.spotify.com/debian/pubkey_6224F9941A8AA6D1.gpg | \
-            gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/spotify.gpg
-        echo "deb http://repository.spotify.com stable non-free" > /etc/apt/sources.list.d/spotify.list
-        apt-get update -y
-        apt-get install -y --no-install-recommends spotify-client
+        if [ "${SPOTX_ONLY:-}" = "1" ]; then
+            info "SPOTX_ONLY mode: skipping Spotify client update."
+        else
+            info "Running on native x86_64. Configuring Spotify official APT repository..."
+            mkdir -p /etc/apt/trusted.gpg.d /etc/apt/sources.list.d
+            curl -sS https://download.spotify.com/debian/pubkey_6224F9941A8AA6D1.gpg | \
+                gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/spotify.gpg
+            echo "deb https://repository.spotify.com stable non-free" > /etc/apt/sources.list.d/spotify.list
+            apt-get update -y
+            apt-get install -y --no-install-recommends spotify-client
+            if command -v dpkg-query > /dev/null 2>&1; then
+                mkdir -p "$(dirname "$VERSION_MARKER")"
+                dpkg-query -W -f='${Version}' spotify-client > "$VERSION_MARKER" 2>/dev/null || true
+            fi
+        fi
         ;;
 
     aarch64|arm64)
-        info "Running on ARM64. Configuring Box64 translation layer..."
-        mkdir -p /etc/apt/trusted.gpg.d /etc/apt/sources.list.d
-        # Add Ryan Fortner's box64 repository
-        wget -qO- https://ryanfortner.github.io/box64-debs/KEY.gpg | \
-            gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/box64-debs-archive-keyring.gpg
-        echo "deb [signed-by=/etc/apt/trusted.gpg.d/box64-debs-archive-keyring.gpg] https://ryanfortner.github.io/box64-debs/debian ./ " \
-            > /etc/apt/sources.list.d/box64.list
+        # ---------------------------------------------------------------
+        # 3a. Box64 — skip if already installed
+        # ---------------------------------------------------------------
+        if command -v box64 > /dev/null 2>&1; then
+            success "Box64 already installed: $(box64 --version 2>&1 | head -1 || echo 'unknown version')"
+        else
+            info "Running on ARM64. Configuring Box64 translation layer..."
+            mkdir -p /etc/apt/trusted.gpg.d /etc/apt/sources.list.d
+            # Add Ryan Fortner's box64 repository
+            wget -qO- https://ryanfortner.github.io/box64-debs/KEY.gpg | \
+                gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/box64-debs-archive-keyring.gpg
+            echo "deb [signed-by=/etc/apt/trusted.gpg.d/box64-debs-archive-keyring.gpg] https://ryanfortner.github.io/box64-debs/debian ./ " \
+                > /etc/apt/sources.list.d/box64.list
 
-        apt-get update -y
-        info "Installing Box64..."
-        apt-get install -y box64-android 2>/dev/null || apt-get install -y box64
-
-        info "Resolving latest Spotify x86_64 debian package..."
-        PKG_PATH=$(curl -sL http://repository.spotify.com/dists/stable/non-free/binary-amd64/Packages | \
-            awk '/^Package: spotify-client$/{p=1} p && /^Filename:/{print $2; exit}')
-
-        if [ -z "$PKG_PATH" ]; then
-            error "Could not resolve latest spotify-client deb package URL from repository."
-            exit 1
+            apt-get update -y
+            info "Installing Box64..."
+            apt-get install -y box64-android 2>/dev/null || apt-get install -y box64
+            success "Box64 installed successfully."
         fi
 
-        SPOTIFY_URL="http://repository.spotify.com/${PKG_PATH}"
-        info "Downloading Spotify client: ${SPOTIFY_URL}"
-        TEMP_DIR=$(mktemp -d)
-        curl -sSL "$SPOTIFY_URL" -o "${TEMP_DIR}/spotify.deb"
+        # ---------------------------------------------------------------
+        # 3b. Spotify client — skip download if version matches
+        # ---------------------------------------------------------------
+        if [ "${SPOTX_ONLY:-}" = "1" ]; then
+            info "SPOTX_ONLY mode: skipping Spotify client update."
+        else
+            resolve_latest_spotify
+            read_installed_version
 
-        info "Extracting Spotify desktop client files..."
-        (
-            cd "$TEMP_DIR"
-            ar -x spotify.deb
-            if [ -f data.tar.gz ]; then
-                tar -xzf data.tar.gz -C /
-            elif [ -f data.tar.xz ]; then
-                tar -xJf data.tar.xz -C /
-            elif [ -f data.tar.zst ]; then
-                tar --zstd -xf data.tar.zst -C /
-            else
-                tar -xf data.tar.* -C /
+            if [ -z "$PKG_PATH" ]; then
+                error "Could not resolve latest spotify-client deb package URL from repository."
+                exit 1
             fi
-        )
-        rm -rf "$TEMP_DIR"
+
+            if [ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" = "$LATEST_VER" ] && [ -f /usr/share/spotify/spotify ]; then
+                success "Spotify ${INSTALLED_VER} is already installed and up-to-date. Skipping download."
+            else
+                if [ -n "$INSTALLED_VER" ]; then
+                    info "Updating Spotify: ${INSTALLED_VER} → ${LATEST_VER}"
+                else
+                    info "Installing Spotify ${LATEST_VER} (fresh install)"
+                fi
+
+                SPOTIFY_URL="https://repository.spotify.com/${PKG_PATH}"
+                info "Downloading Spotify client: ${SPOTIFY_URL}"
+                TEMP_DIR=$(mktemp -d)
+                curl -sSL "$SPOTIFY_URL" -o "${TEMP_DIR}/spotify.deb"
+
+                # Verify package integrity using SHA256 from repository metadata
+                if [ -n "${PKG_SHA256:-}" ]; then
+                    info "Verifying SHA256 integrity of downloaded package..."
+                    ACTUAL_SHA256=$(sha256sum "${TEMP_DIR}/spotify.deb" | awk '{print $1}')
+                    if [ "$ACTUAL_SHA256" != "$PKG_SHA256" ]; then
+                        error "SHA256 mismatch! Expected: ${PKG_SHA256}"
+                        error "                Got:      ${ACTUAL_SHA256}"
+                        error "The downloaded file may be corrupted or tampered with. Aborting."
+                        rm -rf "$TEMP_DIR"
+                        exit 1
+                    fi
+                    success "SHA256 integrity verified: ${PKG_SHA256:0:16}..."
+                else
+                    warn "Could not extract SHA256 from repository metadata. Skipping integrity check."
+                fi
+
+                info "Extracting Spotify desktop client files..."
+                (
+                    cd "$TEMP_DIR"
+                    ar -x spotify.deb
+                    if [ -f data.tar.gz ]; then
+                        tar -xzf data.tar.gz -C /
+                    elif [ -f data.tar.xz ]; then
+                        tar -xJf data.tar.xz -C /
+                    elif [ -f data.tar.zst ]; then
+                        tar --zstd -xf data.tar.zst -C /
+                    else
+                        tar -xf data.tar.* -C /
+                    fi
+                )
+                rm -rf "$TEMP_DIR"
+
+                # Save installed version marker
+                mkdir -p "$(dirname "$VERSION_MARKER")"
+                echo "$LATEST_VER" > "$VERSION_MARKER"
+                success "Spotify ${LATEST_VER} installed and version marker saved."
+            fi
+        fi
 
         # Create wrapper script for Box64 execution
         info "Configuring Box64 Spotify wrapper..."
@@ -133,6 +254,10 @@ case "$ARCH" in
 # Box64 wrapper for Spotify Desktop Client on ARM64
 export BOX64_NOBANNER=1
 export BOX64_DYNAREC=1
+export BOX64_NOSANDBOX=1
+export BOX64_MALLOC_HACK=2
+export BOX64_DYNAREC_STRONGMEM=1
+export BOX64_INPROCESSGPU=1
 export BOX64_LD_LIBRARY_PATH="/usr/share/spotify:${BOX64_LD_LIBRARY_PATH:-}"
 export LD_LIBRARY_PATH="/usr/share/spotify:${LD_LIBRARY_PATH:-}"
 exec box64 /usr/share/spotify/spotify "$@"
@@ -154,18 +279,22 @@ fi
 success "Spotify client successfully installed."
 
 # 5. Apply SpotX-Bash patch (non-interactive mode)
-info "Applying SpotX-Bash patch..."
-SPOTX_SCRIPT_TMP=$(mktemp)
-curl -sSL https://raw.githubusercontent.com/SpotX-Official/SpotX-Bash/main/spotx.sh -o "$SPOTX_SCRIPT_TMP"
-bash "$SPOTX_SCRIPT_TMP" --noninteractive -f -c || {
-    warn "SpotX non-interactive script returned non-zero. Checking patched files..."
-}
-rm -f "$SPOTX_SCRIPT_TMP"
-
-if [ -f /usr/share/spotify/Apps/xpui.spa ]; then
-    success "SpotX patch successfully applied to xpui.spa!"
+if [ "${SPOTX_SKIP:-}" = "1" ]; then
+    info "SPOTX_SKIP is set: skipping SpotX patch application."
 else
-    warn "Spotify xpui.spa not found at standard path. Please check SpotX logs."
+    info "Applying SpotX-Bash patch..."
+    SPOTX_SCRIPT_TMP=$(mktemp)
+    curl -sSL https://raw.githubusercontent.com/SpotX-Official/SpotX-Bash/main/spotx.sh -o "$SPOTX_SCRIPT_TMP"
+    bash "$SPOTX_SCRIPT_TMP" --noninteractive -f -c -P /usr/share/spotify || {
+        warn "SpotX non-interactive script returned non-zero. Checking patched files..."
+    }
+    rm -f "$SPOTX_SCRIPT_TMP"
+
+    if [ -f /usr/share/spotify/Apps/xpui.spa ]; then
+        success "SpotX patch successfully applied to xpui.spa!"
+    else
+        warn "Spotify xpui.spa not found at standard path. Please check SpotX logs."
+    fi
 fi
 
 # 6. Create custom runner inside container (/usr/local/bin/spotify-termux)
@@ -176,7 +305,7 @@ cat << 'RUNNER' > /usr/local/bin/spotify-termux
 # spotify-termux - Environment and flags runner for Spotify inside PRoot
 # ==============================================================================
 export DISPLAY="${DISPLAY:-:0}"
-export PULSE_SERVER="${PULSE_SERVER:-127.0.0.1}"
+export PULSE_SERVER="${PULSE_SERVER:-tcp:127.0.0.1:4713}"
 export PULSE_LATENCY_MSEC=60
 
 # Critical flags for Electron/Chromium in PRoot user-space:
@@ -184,8 +313,6 @@ FLAGS=(
     --no-sandbox
     --disable-dev-shm-usage
     --disable-gpu
-    --in-process-gpu
-    --disable-software-rasterizer
     --disable-accelerated-2d-canvas
     --ozone-platform=x11
 )

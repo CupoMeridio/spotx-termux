@@ -36,16 +36,29 @@ Questo progetto realizza una catena automatizzata per eseguire il client desktop
 ## ⚡ Installazione Rapida (One-Liner)
 
 ### 1. Prerequisiti su Android
-Prima di avviare l'installazione su Termux, installa le due applicazioni necessarie:
+Prima di avviare l'installazione su Termux, installa le applicazioni necessarie:
 
-1. **Termux**: Scarica l'APK da [F-Droid](https://f-droid.org/packages/com.termux/) oppure da [GitHub Releases](https://github.com/termux/termux-app/releases) *(NON usare la versione obsoleta del Google Play Store)*.
-2. **Termux-X11**: Scarica l'APK companion da [GitHub Releases](https://github.com/termux/termux-x11/releases) (consigliato: `termux-x11-universal-debug.apk`).
+- **Obbligatorie:**
+  1. **Termux**: Scarica l'APK da [F-Droid](https://f-droid.org/packages/com.termux/) oppure da [GitHub Releases](https://github.com/termux/termux-app/releases) *(NON usare la versione obsoleta del Google Play Store)*.
+  2. **Termux-X11**: Scarica l'APK companion da [GitHub Releases](https://github.com/termux/termux-x11/releases) (consigliato: `termux-x11-universal-debug.apk`).
+
+- **Facoltativo (consigliato per comodità):**
+  3. **Termux:Widget**: Scarica l'APK da [F-Droid](https://f-droid.org/packages/com.termux.widget/) oppure da [GitHub Releases](https://github.com/termux/termux-widget/releases). Permette di aggiungere una comoda icona/widget sulla home screen dello smartphone per avviare Spotify con un singolo tocco.  
+     > ⚠️ **Importante**: Devi scaricare il widget dalla **stessa identica fonte** usata per Termux (entrambi da F-Droid oppure entrambi da GitHub Releases). Se provengono da fonti diverse, Android ne bloccherà l'installazione per incompatibilità della firma crittografica. (Questo vincolo non si applica a Termux-X11, che è un'app indipendente).
 
 ---
 
 ### 2. Comando di Installazione
-Apri Termux e incolla il seguente comando:
+Apri Termux e incolla i seguenti comandi:
 
+#### Opzione consigliata (scarica, verifica e poi esegui):
+```bash
+curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh -o install.sh
+less install.sh   # Controlla il contenuto dello script
+bash install.sh
+```
+
+#### Esecuzione diretta (one-liner):
 ```bash
 curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh | bash
 ```
@@ -80,6 +93,34 @@ Se hai installato il plugin **Termux:Widget**, aggiungi un widget di Termux sull
 
 ---
 
+## 🔄 Aggiornamento e Manutenzione
+
+Spotify e SpotX possono essere aggiornati in qualsiasi momento senza reinstallare l'intero ambiente container:
+
+```bash
+spotify-update
+```
+
+Lo script verifica la versione installata rispetto a quella più recente del repository APT Spotify:
+- Se Spotify è già aggiornato, **salta il download (~150 MB risparmiati)** e verifica/ri-applica solo la patch SpotX se necessario.
+- Se è disponibile una nuova versione, scarica il nuovo pacchetto deb, ne verifica l'integrità SHA256, lo estrae e applica la patch SpotX.
+
+### Opzioni di comando:
+- **Verificare solo la versione** (nessuna modifica al sistema):
+  ```bash
+  spotify-update --check
+  ```
+- **Ri-applicare solo la patch SpotX** (utile per rinnovare patch/filtri SpotX senza toccare i binari Spotify):
+  ```bash
+  spotify-update --spotx-only
+  ```
+- **Aggiornare solo il client Spotify** (senza applicare SpotX):
+  ```bash
+  spotify-update --skip-spotx
+  ```
+
+---
+
 ## ⚙️ Struttura dei File
 
 ```
@@ -88,7 +129,8 @@ spotx-termux/
 ├── README.md               # Documentazione e guida d'uso
 └── src/
     ├── guest-setup.sh      # Script eseguito dentro Ubuntu PRoot (Box64, Spotify, SpotX)
-    └── start-spotify.sh    # Script host per avviare PulseAudio, X11 e Spotify
+    ├── start-spotify.sh    # Script host per avviare PulseAudio, X11 e Spotify
+    └── update-spotify.sh   # Script host per verificare e applicare aggiornamenti
 ```
 
 ---
