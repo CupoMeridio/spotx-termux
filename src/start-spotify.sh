@@ -14,25 +14,33 @@ RED='\033[0;31m'
 
 echo -e "${CYAN}${BOLD}[*] Launching SpotX Spotify on Termux...${CLR}"
 
-# 1. PulseAudio Audio Bridge
+TERMUX_TMP="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
+
+# 1. PulseAudio Audio Bridge (TCP 127.0.0.1 + OpenSL ES Android Sink)
 if ! pgrep -x "pulseaudio" > /dev/null 2>&1; then
-    echo -e "${CYAN}[+] Starting PulseAudio audio daemon...${CLR}"
+    echo -e "${CYAN}[+] Starting PulseAudio daemon with OpenSL ES sink...${CLR}"
     pulseaudio --start \
         --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" \
+        --load="module-sles-sink" \
         --exit-idle-time=-1 2>/dev/null || true
+else
+    # Ensure SLES sink is loaded even if pulse was started earlier
+    pactl load-module module-sles-sink 2>/dev/null || true
 fi
 
-# 2. Termux-X11 Display Server
+# 2. Termux-X11 Display Server (:0)
 if ! pgrep -f "termux-x11 :0" > /dev/null 2>&1; then
+    # Clear stale X11 sockets/locks if any exist
+    rm -f "${TERMUX_TMP}/.X0-lock" "${TERMUX_TMP}/.X11-unix/X0" 2>/dev/null || true
     echo -e "${CYAN}[+] Starting Termux-X11 display server (:0)...${CLR}"
     termux-x11 :0 -ac &
     sleep 1
 fi
 
 # 3. Bring Termux-X11 Android App to Foreground
-echo -e "${CYAN}[+] Bringing Termux-X11 to foreground...${CLR}"
+echo -e "${CYAN}[+] Bringing Termux-X11 app to foreground...${CLR}"
 am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
 
 # 4. Execute Spotify inside PRoot Ubuntu container
-echo -e "${GREEN}${BOLD}[✔] Starting Spotify in Ubuntu PRoot container...${CLR}"
+echo -e "${GREEN}${BOLD}[✔] Starting Spotify in Ubuntu container...${CLR}"
 exec proot-distro login ubuntu --shared-tmp -- env DISPLAY=:0 PULSE_SERVER=127.0.0.1 /usr/local/bin/spotify-termux "$@"

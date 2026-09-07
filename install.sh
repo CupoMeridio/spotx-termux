@@ -55,18 +55,23 @@ fi
 
 # 2. Update Termux repositories and install host dependencies
 if [ "$IS_TERMUX" = true ]; then
-    info "Updating Termux package lists..."
-    pkg update -y || {
-        warn "pkg update returned a warning/error. Continuing..."
+    info "Enabling Termux X11 repository..."
+    pkg install -y x11-repo || {
+        warn "Could not install x11-repo directly, trying update first..."
     }
 
-    info "Installing required Termux packages (proot-distro, pulseaudio, x11-repo, etc.)..."
-    pkg install -y proot-distro pulseaudio x11-repo wget curl jq
+    info "Updating Termux package lists..."
+    pkg update -y || {
+        warn "pkg update returned a warning. Continuing..."
+    }
+
+    info "Installing required Termux packages (proot-distro, pulseaudio, etc.)..."
+    pkg install -y proot-distro pulseaudio wget curl jq
 
     info "Installing Termux-X11 companion package..."
     pkg install -y termux-x11-nightly || {
         warn "Could not install termux-x11-nightly from repository."
-        warn "Please ensure x11-repo is enabled or install termux-x11 manually."
+        warn "Please ensure x11-repo is enabled or install termux-x11 companion manually."
     }
 fi
 
@@ -83,26 +88,35 @@ else
     success "Container '${CONTAINER_NAME}' created."
 fi
 
-# 4. Resolve and run guest-setup.sh inside container
+# 4. Resolve and run guest-setup.sh inside container via shared tmp
 info "Configuring container environment, dependencies, Box64, Spotify, and SpotX..."
 
-# Determine script directory if running locally
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GUEST_SETUP_LOCAL="${SCRIPT_DIR}/src/guest-setup.sh"
 REMOTE_REPO_RAW="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/guest-setup.sh"
 
+TMP_DIR="${PREFIX:-/usr}/tmp"
+mkdir -p "$TMP_DIR"
+CONTAINER_SETUP_STAGING="${TMP_DIR}/spotx-guest-setup.sh"
+
 if [ -f "$GUEST_SETUP_LOCAL" ]; then
-    info "Using local guest setup script: ${GUEST_SETUP_LOCAL}"
-    proot-distro login "$CONTAINER_NAME" -- bash -c "$(cat "$GUEST_SETUP_LOCAL")"
+    info "Staging local guest setup script: ${GUEST_SETUP_LOCAL}"
+    cp "$GUEST_SETUP_LOCAL" "$CONTAINER_SETUP_STAGING"
 else
     info "Fetching guest setup script from repository: ${REMOTE_REPO_RAW}"
-    proot-distro login "$CONTAINER_NAME" -- bash -c "$(curl -sSL "$REMOTE_REPO_RAW")"
+    curl -sSL "$REMOTE_REPO_RAW" -o "$CONTAINER_SETUP_STAGING"
 fi
+chmod +x "$CONTAINER_SETUP_STAGING"
+
+info "Executing container guest configuration..."
+proot-distro login "$CONTAINER_NAME" --shared-tmp -- /tmp/spotx-guest-setup.sh
+rm -f "$CONTAINER_SETUP_STAGING"
 
 # 5. Install launcher scripts on Termux host
 info "Installing launcher scripts on Termux..."
 
 BIN_DIR="${PREFIX:-/usr}/bin"
+mkdir -p "$BIN_DIR"
 START_SCRIPT_LOCAL="${SCRIPT_DIR}/src/start-spotify.sh"
 START_SCRIPT_DEST="${HOME}/start-spotify.sh"
 COMMAND_BIN="${BIN_DIR}/spotify"
@@ -114,20 +128,19 @@ else
 fi
 chmod +x "$START_SCRIPT_DEST"
 
-# Create symlink or wrapper in $PREFIX/bin so user can just type 'spotify'
+# Create wrapper in $PREFIX/bin so user can just type 'spotify' anywhere
 cat << 'RUN_CMD' > "$COMMAND_BIN"
 #!/usr/bin/env bash
 exec "$HOME/start-spotify.sh" "$@"
 RUN_CMD
 chmod +x "$COMMAND_BIN"
 
-# Termux:Widget shortcut support
+# Termux:Widget shortcut support (pre-creates ~/.shortcuts directory)
 SHORTCUTS_DIR="${HOME}/.shortcuts"
-if [ -d "$SHORTCUTS_DIR" ]; then
-    cp "$START_SCRIPT_DEST" "${SHORTCUTS_DIR}/Spotify"
-    chmod +x "${SHORTCUTS_DIR}/Spotify"
-    success "Termux:Widget shortcut created at ${SHORTCUTS_DIR}/Spotify"
-fi
+mkdir -p "$SHORTCUTS_DIR"
+cp "$START_SCRIPT_DEST" "${SHORTCUTS_DIR}/Spotify"
+chmod +x "${SHORTCUTS_DIR}/Spotify"
+success "Termux:Widget shortcut created at ${SHORTCUTS_DIR}/Spotify"
 
 # 6. Summary and Instructions
 echo
@@ -141,8 +154,9 @@ echo -e "     (Download: https://github.com/termux/termux-x11/releases)"
 echo -e "  2. In Termux, simply type:"
 echo -e "     ${BOLD}${GREEN}spotify${CLR}"
 echo -e "     or: ${BOLD}${GREEN}./start-spotify.sh${CLR}"
+echo -e "  3. Or tap the ${BOLD}Spotify${CLR} widget on your home screen via Termux:Widget."
 echo
 echo -e "${YELLOW}Tips for the best experience:${CLR}"
-echo -e "  * Disable Android battery optimization for Termux so audio does not sleep."
-echo -e "  * In Termux-X11 preferences, set display mode to 'Native' and enable fullscreen."
+echo -e "  * Disable Android battery optimization for Termux so audio playback is not paused."
+echo -e "  * In Termux-X11 preferences, enable fullscreen and Touchpad mouse mode."
 echo

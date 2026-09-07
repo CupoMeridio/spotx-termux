@@ -44,12 +44,13 @@ apt-get install -y --no-install-recommends \
     procps \
     ca-certificates
 
-# 2. Install shared GUI, audio, and Electron runtime dependencies
-info "Installing GUI, audio, and Electron compatibility libraries..."
+# 2. Install shared GUI, audio, and Electron/Chromium runtime dependencies
+info "Installing GUI, audio, and Electron runtime dependencies..."
 apt-get install -y --no-install-recommends \
     libgl1-mesa-dri \
     libgl1 \
     libnss3 \
+    libnspr4 \
     libatk-bridge2.0-0 \
     libxss1 \
     libxtst6 \
@@ -57,17 +58,24 @@ apt-get install -y --no-install-recommends \
     libatomic1 \
     libgbm1 \
     libayatana-appindicator3-1 \
+    libdbus-1-3 \
+    libxkbcommon0 \
     xdg-utils \
     pulseaudio-utils || true
 
-# Try installing libasound2 and libgtk-3 (names vary between noble and earlier distros)
-apt-get install -y --no-install-recommends libasound2t64 libgtk-3-0t64 2>/dev/null || \
-apt-get install -y --no-install-recommends libasound2 libgtk-3-0 2>/dev/null || true
+# Install transitional/architecture libraries (handling Ubuntu 24.04 64-bit time_t suffix)
+apt-get install -y --no-install-recommends \
+    libasound2t64 libgtk-3-0t64 libcups2t64 2>/dev/null || \
+apt-get install -y --no-install-recommends \
+    libasound2 libgtk-3-0 libcups2 2>/dev/null || true
+
+apt-get install -y --no-install-recommends libudev1 2>/dev/null || true
 
 # 3. Handle architecture-specific Spotify setup
 case "$ARCH" in
     x86_64|amd64)
         info "Running on native x86_64. Configuring Spotify official APT repository..."
+        mkdir -p /etc/apt/trusted.gpg.d /etc/apt/sources.list.d
         curl -sS https://download.spotify.com/debian/pubkey_6224F9941A8AA6D1.gpg | \
             gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/spotify.gpg
         echo "deb http://repository.spotify.com stable non-free" > /etc/apt/sources.list.d/spotify.list
@@ -77,6 +85,7 @@ case "$ARCH" in
 
     aarch64|arm64)
         info "Running on ARM64. Configuring Box64 translation layer..."
+        mkdir -p /etc/apt/trusted.gpg.d /etc/apt/sources.list.d
         # Add Ryan Fortner's box64 repository
         wget -qO- https://ryanfortner.github.io/box64-debs/KEY.gpg | \
             gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/box64-debs-archive-keyring.gpg
@@ -87,7 +96,7 @@ case "$ARCH" in
         info "Installing Box64..."
         apt-get install -y box64-android 2>/dev/null || apt-get install -y box64
 
-        info "Downloading Spotify x86_64 package from Spotify repository..."
+        info "Resolving latest Spotify x86_64 debian package..."
         PKG_PATH=$(curl -sL http://repository.spotify.com/dists/stable/non-free/binary-amd64/Packages | \
             awk '/^Package: spotify-client$/{p=1} p && /^Filename:/{print $2; exit}')
 
@@ -97,7 +106,7 @@ case "$ARCH" in
         fi
 
         SPOTIFY_URL="http://repository.spotify.com/${PKG_PATH}"
-        info "Fetching: ${SPOTIFY_URL}"
+        info "Downloading Spotify client: ${SPOTIFY_URL}"
         TEMP_DIR=$(mktemp -d)
         curl -sSL "$SPOTIFY_URL" -o "${TEMP_DIR}/spotify.deb"
 
@@ -117,11 +126,15 @@ case "$ARCH" in
         )
         rm -rf "$TEMP_DIR"
 
-        # Create wrapper script for box64 execution
-        info "Creating Box64 wrapper for Spotify executable..."
+        # Create wrapper script for Box64 execution
+        info "Configuring Box64 Spotify wrapper..."
         cat << 'WRAPPER' > /usr/bin/spotify
 #!/bin/sh
-# Wrapper to execute x86_64 Spotify via Box64 on ARM64
+# Box64 wrapper for Spotify Desktop Client on ARM64
+export BOX64_NOBANNER=1
+export BOX64_DYNAREC=1
+export BOX64_LD_LIBRARY_PATH="/usr/share/spotify:${BOX64_LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="/usr/share/spotify:${LD_LIBRARY_PATH:-}"
 exec box64 /usr/share/spotify/spotify "$@"
 WRAPPER
         chmod +x /usr/bin/spotify
@@ -142,13 +155,15 @@ success "Spotify client successfully installed."
 
 # 5. Apply SpotX-Bash patch (non-interactive mode)
 info "Applying SpotX-Bash patch..."
-bash <(curl -sSL https://raw.githubusercontent.com/SpotX-Official/SpotX-Bash/main/spotx.sh) \
-    --noninteractive -f -c || {
-    warn "SpotX non-interactive script returned non-zero. Verifying patched files..."
+SPOTX_SCRIPT_TMP=$(mktemp)
+curl -sSL https://raw.githubusercontent.com/SpotX-Official/SpotX-Bash/main/spotx.sh -o "$SPOTX_SCRIPT_TMP"
+bash "$SPOTX_SCRIPT_TMP" --noninteractive -f -c || {
+    warn "SpotX non-interactive script returned non-zero. Checking patched files..."
 }
+rm -f "$SPOTX_SCRIPT_TMP"
 
 if [ -f /usr/share/spotify/Apps/xpui.spa ]; then
-    success "SpotX patch successfully processed!"
+    success "SpotX patch successfully applied to xpui.spa!"
 else
     warn "Spotify xpui.spa not found at standard path. Please check SpotX logs."
 fi
@@ -163,7 +178,7 @@ cat << 'RUNNER' > /usr/local/bin/spotify-termux
 export DISPLAY="${DISPLAY:-:0}"
 export PULSE_SERVER="${PULSE_SERVER:-127.0.0.1}"
 
-# Flags required for Chromium / Electron inside PRoot user-space:
+# Critical flags for Electron/Chromium in PRoot user-space:
 FLAGS=(
     --no-sandbox
     --disable-dev-shm-usage
@@ -178,4 +193,4 @@ exec /usr/bin/spotify "${FLAGS[@]}" "$@"
 RUNNER
 
 chmod +x /usr/local/bin/spotify-termux
-success "Guest setup finished completely and successfully!"
+success "Container setup finished completely and successfully!"
