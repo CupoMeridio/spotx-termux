@@ -139,10 +139,18 @@ is_container_installed() {
 
 kill_spotify_processes() {
     info "Terminating active Spotify, audio, and display processes..."
-    # Terminate inside container if running
-    if is_container_installed "$CONTAINER_NAME"; then
-        proot-distro login "$CONTAINER_NAME" -- pkill -f spotify 2>/dev/null || true
-    fi
+
+    # Safely terminate Spotify desktop client processes directly from host.
+    # We must NOT use 'pkill -f spotify' because that regex matches
+    # 'spotify-uninstall' and 'uninstall-spotify.sh', killing the uninstaller itself!
+    # All container processes run under the Termux UID, so host pkill terminates Spotify directly.
+    pkill -x spotify 2>/dev/null || true
+    pkill -f "/usr/share/spotify/spotify" 2>/dev/null || true
+    pkill -f "/usr/local/bin/spotify-termux" 2>/dev/null || true
+    sleep 0.5 2>/dev/null || true
+    pkill -9 -x spotify 2>/dev/null || true
+    pkill -9 -f "/usr/share/spotify/spotify" 2>/dev/null || true
+    pkill -9 -f "/usr/local/bin/spotify-termux" 2>/dev/null || true
 
     # Terminate host audio / X11
     pkill -f "termux.x11" 2>/dev/null || true
@@ -150,7 +158,7 @@ kill_spotify_processes() {
     if command -v pulseaudio >/dev/null 2>&1; then
         pulseaudio -k 2>/dev/null || true
     fi
-    pkill -f "pulseaudio" 2>/dev/null || true
+    pkill -x pulseaudio 2>/dev/null || true
 
     # Clean temporary sockets and lock files
     rm -rf "${TMP_DIR}/.X11-unix" "${TMP_DIR}/.X0-lock" 2>/dev/null || true
@@ -290,10 +298,7 @@ action_full_uninstall() {
         info "PRoot container '${CONTAINER_NAME}' not found."
     fi
 
-    # 2. Remove launchers and shortcuts
-    remove_launchers
-
-    # 3. Optional: purge Termux companion packages if requested
+    # 2. Optional: purge Termux companion packages if requested
     local do_purge_pkgs=0
     if [ "$PURGE_PKGS" -eq 1 ]; then
         do_purge_pkgs=1
@@ -311,6 +316,9 @@ action_full_uninstall() {
     else
         info "Keeping Termux packages intact (may be used by other tools)."
     fi
+
+    # 3. Remove launchers and shortcuts
+    remove_launchers
 
     echo
     echo -e "${GREEN}${BOLD}======================================================${CLR}"

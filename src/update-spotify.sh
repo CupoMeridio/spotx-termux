@@ -135,6 +135,11 @@ else
 fi
 chmod +x "$CONTAINER_SETUP_STAGING"
 
+if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
+    # Terminate running Spotify processes to avoid file conflicts during update
+    pkill -x spotify 2>/dev/null || true
+fi
+
 # Run inside PRoot container with appropriate flags
 info "Running update inside container '${CONTAINER_NAME}'..."
 proot-distro login "$CONTAINER_NAME" --shared-tmp -- \
