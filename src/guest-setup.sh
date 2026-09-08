@@ -120,8 +120,14 @@ apt-get install -y --no-install-recommends \
     libnss3 \
     libnspr4 \
     libatk-bridge2.0-0 \
+    libsm6 \
+    libice6 \
     libxss1 \
     libxtst6 \
+    libxshmfence1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
     libsecret-1-0 \
     libatomic1 \
     libgbm1 \
@@ -129,6 +135,7 @@ apt-get install -y --no-install-recommends \
     libdbus-1-3 \
     libxkbcommon0 \
     xdg-utils \
+    fonts-dejavu-core \
     pulseaudio-utils || true
 
 # Install transitional/architecture libraries (handling Ubuntu 24.04 64-bit time_t suffix)
