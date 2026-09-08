@@ -93,6 +93,41 @@ fi
 # FULL / UPDATE INSTALLATION
 # ===========================================================================
 
+# ---------------------------------------------------------------------------
+# Configure container environment policies for PRoot
+# (Suppresses systemd/daemon reload warnings in containers lacking PID 1 systemd)
+# ---------------------------------------------------------------------------
+# 1. Instruct invoke-rc.d not to start/restart daemons (standard Debian/Ubuntu container policy)
+if [ ! -f /usr/sbin/policy-rc.d ]; then
+    cat << 'POLICY' > /usr/sbin/policy-rc.d
+#!/bin/sh
+exit 101
+POLICY
+    chmod +x /usr/sbin/policy-rc.d
+fi
+
+# 2. Provide a clean systemctl stub so package triggers do not output:
+# "System has not been booted with systemd as init system (PID 1). Can't operate."
+mkdir -p /usr/local/bin
+cat << 'STUB' > /usr/local/bin/systemctl
+#!/bin/sh
+case "${1:-}" in
+    is-active|is-failed) exit 3 ;;
+    status) exit 3 ;;
+    *) exit 0 ;;
+esac
+STUB
+chmod +x /usr/local/bin/systemctl
+
+# Also divert /usr/bin/systemctl to guarantee absolute path invocations use stub
+if command -v dpkg-divert >/dev/null 2>&1; then
+    if ! dpkg-divert --list 2>/dev/null | grep -q "/usr/bin/systemctl"; then
+        dpkg-divert --divert /usr/bin/systemctl.original --rename --add /usr/bin/systemctl 2>/dev/null || true
+    fi
+    cp /usr/local/bin/systemctl /usr/bin/systemctl 2>/dev/null || true
+    chmod +x /usr/bin/systemctl 2>/dev/null || true
+fi
+
 # 1. Update APT lists and install fundamental utilities
 # (apt-get install is inherently idempotent — fast if packages exist)
 info "Updating container package sources..."
@@ -133,6 +168,7 @@ apt-get install -y --no-install-recommends \
     libgbm1 \
     libayatana-appindicator3-1 \
     libdbus-1-3 \
+    dbus-x11 \
     libxkbcommon0 \
     xdg-utils \
     fonts-dejavu-core \
@@ -145,6 +181,15 @@ apt-get install -y --no-install-recommends \
     libasound2 libgtk-3-0 libcups2 2>/dev/null || true
 
 apt-get install -y --no-install-recommends libudev1 2>/dev/null || true
+
+# Ensure D-Bus machine ID exists (required for dbus-launch inside containers)
+if command -v dbus-uuidgen >/dev/null 2>&1; then
+    mkdir -p /var/lib/dbus /etc
+    dbus-uuidgen --ensure 2>/dev/null || true
+    if [ ! -f /etc/machine-id ] && [ -f /var/lib/dbus/machine-id ]; then
+        ln -sf /var/lib/dbus/machine-id /etc/machine-id 2>/dev/null || true
+    fi
+fi
 
 # 3. Handle architecture-specific Spotify setup
 case "$ARCH" in
@@ -264,6 +309,31 @@ case "$ARCH" in
             fi
         fi
 
+        # Configure Box64 settings specifically for Spotify
+        # We must set BOX64_INPROCESSGPU=0 because injecting --in-process-gpu
+        # crashes Spotify's zygote process ("Try 'spotify --help' for more information")
+        info "Configuring Box64 Spotify settings..."
+        mkdir -p /etc /root
+        cat << 'BOX64RC' > /root/.box64rc
+[spotify]
+BOX64_NOBANNER=1
+BOX64_LOG=0
+BOX64_DYNAREC=1
+BOX64_NOSANDBOX=1
+BOX64_INPROCESSGPU=0
+BOX64_MALLOC_HACK=2
+BOX64_DYNAREC_STRONGMEM=1
+BOX64_DYNAREC_BIGBLOCK=0
+BOX64RC
+        # Keep /etc/box64.box64rc in sync without overwriting other package settings
+        if [ -f /etc/box64.box64rc ]; then
+            if ! grep -q "^\[spotify\]" /etc/box64.box64rc 2>/dev/null; then
+                cat /root/.box64rc >> /etc/box64.box64rc
+            fi
+        else
+            cp /root/.box64rc /etc/box64.box64rc 2>/dev/null || true
+        fi
+
         # Create wrapper script for Box64 execution
         info "Configuring Box64 Spotify wrapper..."
         rm -f /usr/bin/spotify
@@ -271,11 +341,13 @@ case "$ARCH" in
 #!/bin/sh
 # Box64 wrapper for Spotify Desktop Client on ARM64
 export BOX64_NOBANNER=1
+export BOX64_LOG=0
 export BOX64_DYNAREC=1
 export BOX64_NOSANDBOX=1
+export BOX64_INPROCESSGPU=0
 export BOX64_MALLOC_HACK=2
 export BOX64_DYNAREC_STRONGMEM=1
-export BOX64_INPROCESSGPU=1
+export BOX64_DYNAREC_BIGBLOCK=0
 export BOX64_LD_LIBRARY_PATH="/usr/share/spotify:${BOX64_LD_LIBRARY_PATH:-}"
 export LD_LIBRARY_PATH="/usr/share/spotify:${LD_LIBRARY_PATH:-}"
 exec box64 /usr/share/spotify/spotify "$@"
@@ -325,8 +397,25 @@ cat << 'RUNNER' > /usr/local/bin/spotify-termux
 export DISPLAY="${DISPLAY:-:0}"
 export PULSE_SERVER="${PULSE_SERVER:-tcp:127.0.0.1:4713}"
 export PULSE_LATENCY_MSEC=60
+export LIBGL_ALWAYS_SOFTWARE=1
 
-exec /usr/bin/spotify "$@"
+# Clear stale GPU cache which causes black screen on restarted sessions
+rm -rf "${HOME:-/root}/.cache/spotify/GPUCache" "${HOME:-/root}/.config/spotify/GPUCache" /root/.cache/spotify/GPUCache 2>/dev/null || true
+
+# Initialize D-Bus session bus if needed
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] || [ "${DBUS_SESSION_BUS_ADDRESS}" = "disabled:" ]; then
+    if command -v dbus-launch >/dev/null 2>&1; then
+        dbus-uuidgen --ensure 2>/dev/null || true
+        eval "$(dbus-launch --sh-syntax 2>/dev/null)" || true
+    fi
+fi
+
+# Run Spotify with software rendering and no-zygote to prevent black screen under Box64
+exec /usr/bin/spotify \
+    --disable-gpu \
+    --disable-software-rasterizer \
+    --no-zygote \
+    "$@"
 RUNNER
 
 chmod +x /usr/local/bin/spotify-termux

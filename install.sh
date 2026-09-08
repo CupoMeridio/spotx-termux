@@ -101,6 +101,15 @@ if [ "$IS_TERMUX" = true ]; then
         warn "Could not install termux-x11-nightly from repository."
         warn "Please ensure x11-repo is enabled or install termux-x11 companion manually."
     }
+
+    # Ensure Termux allows external apps (required for Termux-X11 interaction)
+    mkdir -p "${HOME}/.termux"
+    if grep -q "^[[:space:]]*allow-external-apps" "${HOME}/.termux/termux.properties" 2>/dev/null; then
+        sed -i 's/^[[:space:]]*allow-external-apps[[:space:]]*=.*/allow-external-apps = true/' "${HOME}/.termux/termux.properties"
+    else
+        echo "allow-external-apps = true" >> "${HOME}/.termux/termux.properties"
+    fi
+    termux-reload-settings >/dev/null 2>&1 || true
 fi
 
 # 3. Setup Ubuntu container via proot-distro

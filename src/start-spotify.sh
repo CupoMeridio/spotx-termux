@@ -14,6 +14,13 @@ RED='\033[0;31m'
 
 echo -e "${CYAN}${BOLD}[*] Launching SpotX Spotify on Android Termux...${CLR}"
 
+# Check prerequisites
+if ! command -v proot-distro > /dev/null 2>&1; then
+    echo -e "${RED}${BOLD}[✘] Error: proot-distro is not installed!${CLR}"
+    echo -e "${YELLOW}Please run the installer first: bash install.sh${CLR}"
+    exit 1
+fi
+
 # 0. Acquire Termux Wake-Lock to prevent Android CPU sleep when screen is off
 if command -v termux-wake-lock > /dev/null 2>&1; then
     termux-wake-lock 2>/dev/null || true
@@ -38,13 +45,20 @@ if ! pgrep -f "termux.x11" > /dev/null 2>&1 && ! pgrep -f "termux-x11" > /dev/nu
     # Clear stale X11 sockets/locks only if server is not already running
     rm -f "${TERMUX_TMP}/.X0-lock" "${TERMUX_TMP}/.X11-unix/X0" 2>/dev/null || true
     echo -e "${CYAN}[+] Starting Termux-X11 display server (:0)...${CLR}"
-    termux-x11 :0 -ac &
-    sleep 1
+    termux-x11 :0 -legacy-drawing -ac &
+    for ((i=1; i<=30; i++)); do
+        if [ -S "${TERMUX_TMP}/.X11-unix/X0" ] || [ -f "${TERMUX_TMP}/.X0-lock" ]; then
+            break
+        fi
+        sleep 0.1
+    done
+    sleep 0.5
 fi
 
 # 3. Bring Termux-X11 Android App to Foreground
 echo -e "${CYAN}[+] Bringing Termux-X11 app to foreground...${CLR}"
 am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
+sleep 1
 
 # 4. Execute Spotify inside PRoot Ubuntu container
 echo -e "${GREEN}${BOLD}[✔] Starting Spotify in Ubuntu container...${CLR}"
