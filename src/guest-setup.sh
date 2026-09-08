@@ -194,8 +194,14 @@ case "$ARCH" in
                 exit 1
             fi
 
-            if [ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" = "$LATEST_VER" ] && [ -f /usr/share/spotify/spotify ]; then
-                success "Spotify ${INSTALLED_VER} is already installed and up-to-date. Skipping download."
+            # Helper to check if a file is a valid ELF binary (not a shell script from symlink overwrite)
+            is_valid_elf() {
+                local f="$1"
+                [ -f "$f" ] && [ "$(head -c 4 "$f" 2>/dev/null)" = $'\x7fELF' ]
+            }
+
+            if [ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" = "$LATEST_VER" ] && is_valid_elf /usr/share/spotify/spotify; then
+                success "Spotify ${INSTALLED_VER} is already installed, valid ELF binary, and up-to-date. Skipping download."
             else
                 if [ -n "$INSTALLED_VER" ]; then
                     info "Updating Spotify: ${INSTALLED_VER} → ${LATEST_VER}"
@@ -240,6 +246,10 @@ case "$ARCH" in
                 )
                 rm -rf "$TEMP_DIR"
 
+                # Crucial: Debian package extracts /usr/bin/spotify as a symlink to ../share/spotify/spotify.
+                # Remove it now so our Box64 wrapper does not follow the symlink and overwrite /usr/share/spotify/spotify!
+                rm -f /usr/bin/spotify
+
                 # Save installed version marker
                 mkdir -p "$(dirname "$VERSION_MARKER")"
                 echo "$LATEST_VER" > "$VERSION_MARKER"
@@ -249,6 +259,7 @@ case "$ARCH" in
 
         # Create wrapper script for Box64 execution
         info "Configuring Box64 Spotify wrapper..."
+        rm -f /usr/bin/spotify
         cat << 'WRAPPER' > /usr/bin/spotify
 #!/bin/sh
 # Box64 wrapper for Spotify Desktop Client on ARM64
