@@ -91,15 +91,23 @@ fi
 # 4. Resolve and run guest-setup.sh inside container via shared tmp
 info "Configuring container environment, dependencies, Box64, Spotify, and SpotX..."
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUEST_SETUP_LOCAL="${SCRIPT_DIR}/src/guest-setup.sh"
+SCRIPT_DIR=""
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+fi
+
+GUEST_SETUP_LOCAL=""
+if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/guest-setup.sh" ]; then
+    GUEST_SETUP_LOCAL="${SCRIPT_DIR}/src/guest-setup.sh"
+fi
+
 REMOTE_REPO_RAW="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/guest-setup.sh"
 
 TMP_DIR="${PREFIX:-/usr}/tmp"
 mkdir -p "$TMP_DIR"
 CONTAINER_SETUP_STAGING="${TMP_DIR}/spotx-guest-setup.sh"
 
-if [ -f "$GUEST_SETUP_LOCAL" ]; then
+if [ -n "$GUEST_SETUP_LOCAL" ] && [ -f "$GUEST_SETUP_LOCAL" ]; then
     info "Staging local guest setup script: ${GUEST_SETUP_LOCAL}"
     cp "$GUEST_SETUP_LOCAL" "$CONTAINER_SETUP_STAGING"
 else
@@ -117,11 +125,15 @@ info "Installing launcher scripts on Termux..."
 
 BIN_DIR="${PREFIX:-/usr}/bin"
 mkdir -p "$BIN_DIR"
-START_SCRIPT_LOCAL="${SCRIPT_DIR}/src/start-spotify.sh"
+
+START_SCRIPT_LOCAL=""
+if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/start-spotify.sh" ]; then
+    START_SCRIPT_LOCAL="${SCRIPT_DIR}/src/start-spotify.sh"
+fi
 START_SCRIPT_DEST="${HOME}/start-spotify.sh"
 COMMAND_BIN="${BIN_DIR}/spotify"
 
-if [ -f "$START_SCRIPT_LOCAL" ]; then
+if [ -n "$START_SCRIPT_LOCAL" ] && [ -f "$START_SCRIPT_LOCAL" ]; then
     cp "$START_SCRIPT_LOCAL" "$START_SCRIPT_DEST"
 else
     curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/start-spotify.sh" -o "$START_SCRIPT_DEST"
@@ -136,11 +148,14 @@ RUN_CMD
 chmod +x "$COMMAND_BIN"
 
 # Install updater script and wrapper
-UPDATE_SCRIPT_LOCAL="${SCRIPT_DIR}/src/update-spotify.sh"
+UPDATE_SCRIPT_LOCAL=""
+if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/update-spotify.sh" ]; then
+    UPDATE_SCRIPT_LOCAL="${SCRIPT_DIR}/src/update-spotify.sh"
+fi
 UPDATE_SCRIPT_DEST="${HOME}/update-spotify.sh"
 UPDATE_BIN="${BIN_DIR}/spotify-update"
 
-if [ -f "$UPDATE_SCRIPT_LOCAL" ]; then
+if [ -n "$UPDATE_SCRIPT_LOCAL" ] && [ -f "$UPDATE_SCRIPT_LOCAL" ]; then
     cp "$UPDATE_SCRIPT_LOCAL" "$UPDATE_SCRIPT_DEST"
 else
     curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/update-spotify.sh" -o "$UPDATE_SCRIPT_DEST"

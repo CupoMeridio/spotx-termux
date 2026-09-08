@@ -91,8 +91,18 @@ if [ ! -d "$CONTAINER_ROOTFS" ]; then
 fi
 
 # Stage guest-setup.sh
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUEST_SETUP_LOCAL="${SCRIPT_DIR}/guest-setup.sh"
+SCRIPT_DIR=""
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+fi
+
+GUEST_SETUP_LOCAL=""
+if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/guest-setup.sh" ]; then
+    GUEST_SETUP_LOCAL="${SCRIPT_DIR}/guest-setup.sh"
+elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/guest-setup.sh" ]; then
+    GUEST_SETUP_LOCAL="${SCRIPT_DIR}/src/guest-setup.sh"
+fi
+
 REMOTE_REPO_RAW="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/guest-setup.sh"
 
 TMP_DIR="${PREFIX:-/usr}/tmp"
@@ -102,7 +112,7 @@ CONTAINER_SETUP_STAGING="${TMP_DIR}/spotx-guest-setup.sh"
 # Ensure cleanup on exit
 trap 'rm -f "$CONTAINER_SETUP_STAGING"' EXIT
 
-if [ -f "$GUEST_SETUP_LOCAL" ]; then
+if [ -n "$GUEST_SETUP_LOCAL" ] && [ -f "$GUEST_SETUP_LOCAL" ]; then
     info "Using local guest setup script: ${GUEST_SETUP_LOCAL}"
     cp "$GUEST_SETUP_LOCAL" "$CONTAINER_SETUP_STAGING"
 else
