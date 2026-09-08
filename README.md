@@ -178,6 +178,9 @@ spotx-termux/
 
 ## 🛠️ Troubleshooting & Tips
 
+* **Recommended Login Method (QR Code):**  
+  When logging into Spotify for the first time, **strongly prefer the QR Code login option**.  
+  *Why:* The standard web-based "Log In" button attempts to launch a desktop web browser via `xdg-open` to complete an external OAuth authentication flow. Because the minimal PRoot Ubuntu container does not have a desktop browser installed, clicking that button will fail silently or hang.
 * **Audio cuts out in background:**  
   Android applies aggressive battery optimizations. Go to *Android Settings > Apps > Termux > Battery* and set it to **Unrestricted**.
 * **Touch controls in Termux-X11:**  

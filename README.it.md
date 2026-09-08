@@ -178,6 +178,9 @@ spotx-termux/
 
 ## 🛠️ Risoluzione Problemi & Consigli
 
+* **Metodo di Login Consigliato (Codice QR):**  
+  Al primo accesso a Spotify, **si raccomanda vivamente di utilizzare la procedura con Codice QR**.  
+  *Perché:* Il classico pulsante "Accedi" tenta di aprire un browser web desktop di sistema tramite `xdg-open` per completare l'autenticazione OAuth esterna. Poiché all'interno del container minimale PRoot Ubuntu non è presente un browser web grafico, la richiesta fallisce silenziosamente o resta in attesa.
 * **Audio che si interrompe in background:**  
   Android applica restrizioni aggressive sul risparmio energetico. Vai nelle *Impostazioni Android > App > Termux > Batteria* e imposta **Senza restrizioni**.
 * **Controlli touch in Termux-X11:**  
