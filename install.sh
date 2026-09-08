@@ -146,11 +146,6 @@ fi
 # 4. Resolve and run guest-setup.sh inside container via shared tmp
 info "Configuring container environment, dependencies, Box64, Spotify, and SpotX..."
 
-SCRIPT_DIR=""
-if [ -n "${BASH_SOURCE[0]:-}" ]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
-fi
-
 GUEST_SETUP_LOCAL=""
 if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/guest-setup.sh" ]; then
     GUEST_SETUP_LOCAL="${SCRIPT_DIR}/src/guest-setup.sh"
