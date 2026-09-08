@@ -167,12 +167,16 @@ apt-get install -y --no-install-recommends \
     libatomic1 \
     libgbm1 \
     libayatana-appindicator3-1 \
+    libayatana-appindicator-glib2 \
     libdbus-1-3 \
     dbus-x11 \
     libva2 \
     libva-drm2 \
     libva-x11-2 \
     libnotify4 \
+    libpci3 \
+    libvulkan1 \
+    mesa-vulkan-drivers \
     libxkbcommon0 \
     xdg-utils \
     fonts-dejavu-core \
@@ -417,9 +421,7 @@ if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] || [ "${DBUS_SESSION_BUS_ADDRESS}" = "
 fi
 
 # Run Spotify with software rendering
-exec /usr/bin/spotify \
-    --disable-gpu \
-    "$@"
+exec /usr/bin/spotify "$@"
 RUNNER
 
 chmod +x /usr/local/bin/spotify-termux
