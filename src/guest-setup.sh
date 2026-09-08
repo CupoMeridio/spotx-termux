@@ -326,16 +326,7 @@ export DISPLAY="${DISPLAY:-:0}"
 export PULSE_SERVER="${PULSE_SERVER:-tcp:127.0.0.1:4713}"
 export PULSE_LATENCY_MSEC=60
 
-# Critical flags for Electron/Chromium in PRoot user-space:
-FLAGS=(
-    --no-sandbox
-    --disable-dev-shm-usage
-    --disable-gpu
-    --disable-accelerated-2d-canvas
-    --ozone-platform=x11
-)
-
-exec /usr/bin/spotify "${FLAGS[@]}" "$@"
+exec /usr/bin/spotify "$@"
 RUNNER
 
 chmod +x /usr/local/bin/spotify-termux

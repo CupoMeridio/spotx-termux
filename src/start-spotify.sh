@@ -34,8 +34,8 @@ else
 fi
 
 # 2. Termux-X11 Display Server (:0)
-if ! pgrep -f "termux-x11 :0" > /dev/null 2>&1; then
-    # Clear stale X11 sockets/locks if any exist
+if ! pgrep -f "termux.x11" > /dev/null 2>&1 && ! pgrep -f "termux-x11" > /dev/null 2>&1; then
+    # Clear stale X11 sockets/locks only if server is not already running
     rm -f "${TERMUX_TMP}/.X0-lock" "${TERMUX_TMP}/.X11-unix/X0" 2>/dev/null || true
     echo -e "${CYAN}[+] Starting Termux-X11 display server (:0)...${CLR}"
     termux-x11 :0 -ac &
@@ -48,4 +48,4 @@ am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 
 
 # 4. Execute Spotify inside PRoot Ubuntu container
 echo -e "${GREEN}${BOLD}[✔] Starting Spotify in Ubuntu container...${CLR}"
-exec proot-distro login ubuntu --shared-tmp -- env DISPLAY=:0 PULSE_SERVER=127.0.0.1 /usr/local/bin/spotify-termux "$@"
+exec proot-distro login ubuntu --shared-tmp -- env DISPLAY=:0 PULSE_SERVER=tcp:127.0.0.1:4713 /usr/local/bin/spotify-termux "$@"
