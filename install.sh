@@ -139,7 +139,7 @@ if [ -n "$GUEST_SETUP_LOCAL" ] && [ -f "$GUEST_SETUP_LOCAL" ]; then
     cp "$GUEST_SETUP_LOCAL" "$CONTAINER_SETUP_STAGING"
 else
     info "Fetching guest setup script from repository: ${REMOTE_REPO_RAW}"
-    curl -sSL "$REMOTE_REPO_RAW" -o "$CONTAINER_SETUP_STAGING"
+    curl -sSL "${REMOTE_REPO_RAW}?t=$(date +%s)" -o "$CONTAINER_SETUP_STAGING"
 fi
 chmod +x "$CONTAINER_SETUP_STAGING"
 
@@ -163,7 +163,7 @@ COMMAND_BIN="${BIN_DIR}/spotify"
 if [ -n "$START_SCRIPT_LOCAL" ] && [ -f "$START_SCRIPT_LOCAL" ]; then
     cp "$START_SCRIPT_LOCAL" "$START_SCRIPT_DEST"
 else
-    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/start-spotify.sh" -o "$START_SCRIPT_DEST"
+    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/start-spotify.sh?t=$(date +%s)" -o "$START_SCRIPT_DEST"
 fi
 chmod +x "$START_SCRIPT_DEST"
 
@@ -185,7 +185,7 @@ UPDATE_BIN="${BIN_DIR}/spotify-update"
 if [ -n "$UPDATE_SCRIPT_LOCAL" ] && [ -f "$UPDATE_SCRIPT_LOCAL" ]; then
     cp "$UPDATE_SCRIPT_LOCAL" "$UPDATE_SCRIPT_DEST"
 else
-    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/update-spotify.sh" -o "$UPDATE_SCRIPT_DEST"
+    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/update-spotify.sh?t=$(date +%s)" -o "$UPDATE_SCRIPT_DEST"
 fi
 chmod +x "$UPDATE_SCRIPT_DEST"
 

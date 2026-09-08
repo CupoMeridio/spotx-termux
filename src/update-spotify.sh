@@ -131,7 +131,7 @@ if [ -n "$GUEST_SETUP_LOCAL" ] && [ -f "$GUEST_SETUP_LOCAL" ]; then
     cp "$GUEST_SETUP_LOCAL" "$CONTAINER_SETUP_STAGING"
 else
     info "Fetching latest guest setup script from repository..."
-    curl -sSL "$REMOTE_REPO_RAW" -o "$CONTAINER_SETUP_STAGING"
+    curl -sSL "${REMOTE_REPO_RAW}?t=$(date +%s)" -o "$CONTAINER_SETUP_STAGING"
 fi
 chmod +x "$CONTAINER_SETUP_STAGING"
 
