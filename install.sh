@@ -77,15 +77,42 @@ fi
 
 # 3. Setup Ubuntu container via proot-distro
 CONTAINER_NAME="ubuntu"
-CONTAINER_ROOTFS="${PREFIX:-/usr}/var/lib/proot-distro/installed-rootfs/${CONTAINER_NAME}"
+
+is_container_installed() {
+    local name="$1"
+    local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
+    if [ -d "${prefix}/var/lib/proot-distro/containers/${name}" ] || \
+       [ -d "${prefix}/var/lib/proot-distro/installed-rootfs/${name}" ] || \
+       [ -d "/usr/var/lib/proot-distro/containers/${name}" ] || \
+       [ -d "/usr/var/lib/proot-distro/installed-rootfs/${name}" ]; then
+        return 0
+    fi
+    if command -v proot-distro >/dev/null 2>&1; then
+        if proot-distro login "$name" -- true >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    return 1
+}
 
 info "Checking PRoot container '${CONTAINER_NAME}'..."
-if [ -d "$CONTAINER_ROOTFS" ]; then
+if is_container_installed "$CONTAINER_NAME"; then
     success "Container '${CONTAINER_NAME}' already installed."
 else
     info "Installing Ubuntu container via proot-distro (Ubuntu 24.04 LTS)..."
-    proot-distro install "$CONTAINER_NAME"
-    success "Container '${CONTAINER_NAME}' created."
+    INSTALL_OUTPUT=""
+    if ! INSTALL_OUTPUT=$(proot-distro install "$CONTAINER_NAME" 2>&1); then
+        echo "$INSTALL_OUTPUT"
+        if [[ "$INSTALL_OUTPUT" == *"already exists"* ]] || is_container_installed "$CONTAINER_NAME"; then
+            warn "Container '${CONTAINER_NAME}' already exists. Continuing..."
+        else
+            error "Failed to install PRoot container '${CONTAINER_NAME}'."
+            exit 1
+        fi
+    else
+        echo "$INSTALL_OUTPUT"
+        success "Container '${CONTAINER_NAME}' created."
+    fi
 fi
 
 # 4. Resolve and run guest-setup.sh inside container via shared tmp

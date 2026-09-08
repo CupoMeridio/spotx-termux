@@ -74,7 +74,6 @@ echo -e "${CYAN}${BOLD}   SpotX Termux - Updater Orchestrator               ${CL
 echo -e "${CYAN}======================================================${CLR}"
 
 CONTAINER_NAME="ubuntu"
-CONTAINER_ROOTFS="${PREFIX:-/usr}/var/lib/proot-distro/installed-rootfs/${CONTAINER_NAME}"
 
 # Verify proot-distro is installed
 if ! command -v proot-distro > /dev/null 2>&1; then
@@ -83,9 +82,24 @@ if ! command -v proot-distro > /dev/null 2>&1; then
     exit 1
 fi
 
+is_container_installed() {
+    local name="$1"
+    local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
+    if [ -d "${prefix}/var/lib/proot-distro/containers/${name}" ] || \
+       [ -d "${prefix}/var/lib/proot-distro/installed-rootfs/${name}" ] || \
+       [ -d "/usr/var/lib/proot-distro/containers/${name}" ] || \
+       [ -d "/usr/var/lib/proot-distro/installed-rootfs/${name}" ]; then
+        return 0
+    fi
+    if proot-distro login "$name" -- true >/dev/null 2>&1; then
+        return 0
+    fi
+    return 1
+}
+
 # Verify container exists
-if [ ! -d "$CONTAINER_ROOTFS" ]; then
-    error "PRoot container '${CONTAINER_NAME}' is not installed at ${CONTAINER_ROOTFS}."
+if ! is_container_installed "$CONTAINER_NAME"; then
+    error "PRoot container '${CONTAINER_NAME}' is not installed."
     error "Please run the full installer first: bash install.sh"
     exit 1
 fi
