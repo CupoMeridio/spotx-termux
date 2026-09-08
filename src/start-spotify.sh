@@ -41,6 +41,13 @@ else
 fi
 
 # 2. Termux-X11 Display Server (:0)
+# If Spotify is not actively running, ensure any stale/frozen Termux-X11 instance is cleared
+if ! pgrep -x "spotify" > /dev/null 2>&1 && ! pgrep -f "/usr/share/spotify/spotify" > /dev/null 2>&1; then
+    pkill -f "termux.x11" 2>/dev/null || true
+    pkill -f "termux-x11" 2>/dev/null || true
+    sleep 0.2
+fi
+
 if ! pgrep -f "termux.x11" > /dev/null 2>&1 && ! pgrep -f "termux-x11" > /dev/null 2>&1; then
     # Clear stale X11 sockets/locks only if server is not already running
     rm -f "${TERMUX_TMP}/.X0-lock" "${TERMUX_TMP}/.X11-unix/X0" 2>/dev/null || true

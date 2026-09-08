@@ -136,6 +136,21 @@ fi
 chmod +x "$CONTAINER_SETUP_STAGING"
 
 if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
+    # Refresh host launcher start-spotify.sh
+    START_SCRIPT_LOCAL=""
+    if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/start-spotify.sh" ]; then
+        START_SCRIPT_LOCAL="${SCRIPT_DIR}/start-spotify.sh"
+    elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/start-spotify.sh" ]; then
+        START_SCRIPT_LOCAL="${SCRIPT_DIR}/src/start-spotify.sh"
+    fi
+    START_SCRIPT_DEST="${HOME}/start-spotify.sh"
+    if [ -n "$START_SCRIPT_LOCAL" ] && [ -f "$START_SCRIPT_LOCAL" ]; then
+        cp "$START_SCRIPT_LOCAL" "$START_SCRIPT_DEST"
+    else
+        curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/start-spotify.sh?t=$(date +%s)" -o "$START_SCRIPT_DEST" 2>/dev/null || true
+    fi
+    chmod +x "$START_SCRIPT_DEST" 2>/dev/null || true
+
     # Terminate running Spotify processes to avoid file conflicts during update
     pkill -x spotify 2>/dev/null || true
 fi

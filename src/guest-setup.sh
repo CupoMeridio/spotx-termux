@@ -169,6 +169,10 @@ apt-get install -y --no-install-recommends \
     libayatana-appindicator3-1 \
     libdbus-1-3 \
     dbus-x11 \
+    libva2 \
+    libva-drm2 \
+    libva-x11-2 \
+    libnotify4 \
     libxkbcommon0 \
     xdg-utils \
     fonts-dejavu-core \
@@ -325,8 +329,9 @@ BOX64_MALLOC_HACK=2
 BOX64_DYNAREC_STRONGMEM=1
 BOX64_DYNAREC_BIGBLOCK=0
 BOX64RC
-        # Keep /etc/box64.box64rc in sync without overwriting other package settings
+        # Fix /etc/box64.box64rc (installed by box64 package) to ensure BOX64_INPROCESSGPU is 0
         if [ -f /etc/box64.box64rc ]; then
+            sed -i 's/BOX64_INPROCESSGPU[[:space:]]*=[[:space:]]*1/BOX64_INPROCESSGPU=0/g' /etc/box64.box64rc 2>/dev/null || true
             if ! grep -q "^\[spotify\]" /etc/box64.box64rc 2>/dev/null; then
                 cat /root/.box64rc >> /etc/box64.box64rc
             fi
@@ -398,6 +403,7 @@ export DISPLAY="${DISPLAY:-:0}"
 export PULSE_SERVER="${PULSE_SERVER:-tcp:127.0.0.1:4713}"
 export PULSE_LATENCY_MSEC=60
 export LIBGL_ALWAYS_SOFTWARE=1
+export GDK_BACKEND=x11
 
 # Clear stale GPU cache which causes black screen on restarted sessions
 rm -rf "${HOME:-/root}/.cache/spotify/GPUCache" "${HOME:-/root}/.config/spotify/GPUCache" /root/.cache/spotify/GPUCache 2>/dev/null || true
@@ -410,11 +416,9 @@ if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] || [ "${DBUS_SESSION_BUS_ADDRESS}" = "
     fi
 fi
 
-# Run Spotify with software rendering and no-zygote to prevent black screen under Box64
+# Run Spotify with software rendering
 exec /usr/bin/spotify \
     --disable-gpu \
-    --disable-software-rasterizer \
-    --no-zygote \
     "$@"
 RUNNER
 
