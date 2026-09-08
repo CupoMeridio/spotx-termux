@@ -123,11 +123,49 @@ The script checks your installed version against the latest package in the Spoti
 
 ---
 
+## 🗑️ Uninstallation & Cleanup
+
+If you want to clean up or uninstall SpotX-Termux, you can use the built-in modular cleanup utility:
+
+```bash
+spotify-uninstall
+```
+
+*(or `bash uninstall.sh`, or via one-liner `curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/uninstall.sh | bash`)*
+
+### Interactive Cleanup Options:
+1. **Full Uninstallation (`--full` / `-f`)**:
+   - Stops all running Spotify, Termux-X11, and PulseAudio background processes.
+   - Completely removes the PRoot Ubuntu container (**freeing ~1+ GB of storage**).
+   - Deletes all command launchers (`spotify`, `spotify-update`, `spotify-uninstall`) and Termux:Widget shortcuts.
+   - Optionally asks if you also want to remove unused Termux packages (`termux-x11-nightly`, `pulseaudio`).
+2. **Remove Spotify & SpotX only (`--keep-ubuntu` / `--spotify-only`)**:
+   - Uninstalls Spotify, Box64, SpotX, and user cache/config files inside the container.
+   - Removes Spotify Termux launchers.
+   - **Preserves the Ubuntu container intact** for your other projects and tools.
+3. **Revert SpotX patch only (`--spotx-only` / `-s`)**:
+   - Restores the official unmodified desktop Spotify client.
+   - Keeps Spotify and the container intact.
+4. **Clean Cache & Temporary Files (`--clean-cache` / `-c`)**:
+   - Cleans Spotify user caches and APT archives to free disk space without uninstalling anything.
+5. **Remove Termux launchers only (`--launchers-only` / `-l`)**:
+   - Removes Termux command wrappers and home screen widgets while keeping the container intact.
+
+### Non-Interactive & Automation:
+```bash
+spotify-uninstall --full -y        # Completely remove everything without prompting
+spotify-uninstall --clean-cache    # Free disk space (cache cleanup)
+spotify-uninstall --spotx-only     # Revert to official stock Spotify
+```
+
+---
+
 ## ⚙️ Repository Structure
 
 ```
 spotx-termux/
 ├── install.sh              # Main installation script
+├── uninstall.sh            # Modular cleanup & uninstallation script
 ├── README.md               # Official documentation (English)
 ├── README.it.md            # Documentation (Italian)
 └── src/

@@ -18,6 +18,34 @@ success() { echo -e "${GREEN}${BOLD}[✔]${CLR} $*"; }
 warn()    { echo -e "${YELLOW}${BOLD}[!]${CLR} $*"; }
 error()   { echo -e "${RED}${BOLD}[✘]${CLR} $*" >&2; }
 
+# Resolve script directory early
+SCRIPT_DIR=""
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+fi
+
+# Delegate to uninstaller if requested
+if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "-u" ]; then
+    shift
+    if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/uninstall.sh" ]; then
+        exec bash "${SCRIPT_DIR}/uninstall.sh" "$@"
+    else
+        exec bash <(curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/uninstall.sh?t=$(date +%s)") "$@"
+    fi
+fi
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+    echo "SpotX-Termux Installer"
+    echo
+    echo "Usage:"
+    echo "  bash install.sh [OPTIONS]"
+    echo
+    echo "Options:"
+    echo "  --uninstall, -u [ARGS]   Launch the uninstaller & cleanup utility"
+    echo "  --help, -h               Show this help message"
+    exit 0
+fi
+
 echo -e "${GREEN}${BOLD}"
 echo "  ____             _  __  __   _____                                "
 echo " / ___| _ __   ___| |_\ \/ /  |_   _|__ _ __ _ __ ___  _   ___  __ "
@@ -195,6 +223,27 @@ exec "$HOME/update-spotify.sh" "$@"
 UPDATE_CMD
 chmod +x "$UPDATE_BIN"
 
+# Install uninstaller script and wrapper
+UNINSTALL_SCRIPT_LOCAL=""
+if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/uninstall.sh" ]; then
+    UNINSTALL_SCRIPT_LOCAL="${SCRIPT_DIR}/uninstall.sh"
+fi
+UNINSTALL_SCRIPT_DEST="${HOME}/uninstall-spotify.sh"
+UNINSTALL_BIN="${BIN_DIR}/spotify-uninstall"
+
+if [ -n "$UNINSTALL_SCRIPT_LOCAL" ] && [ -f "$UNINSTALL_SCRIPT_LOCAL" ]; then
+    cp "$UNINSTALL_SCRIPT_LOCAL" "$UNINSTALL_SCRIPT_DEST"
+else
+    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/uninstall.sh?t=$(date +%s)" -o "$UNINSTALL_SCRIPT_DEST"
+fi
+chmod +x "$UNINSTALL_SCRIPT_DEST"
+
+cat << 'UNINSTALL_CMD' > "$UNINSTALL_BIN"
+#!/usr/bin/env bash
+exec "$HOME/uninstall-spotify.sh" "$@"
+UNINSTALL_CMD
+chmod +x "$UNINSTALL_BIN"
+
 # Termux:Widget shortcut support (pre-creates ~/.shortcuts directory)
 SHORTCUTS_DIR="${HOME}/.shortcuts"
 mkdir -p "$SHORTCUTS_DIR"
@@ -208,12 +257,13 @@ echo -e "${GREEN}${BOLD}======================================================${
 echo -e "${GREEN}${BOLD}      Installation Completed Successfully!           ${CLR}"
 echo -e "${GREEN}${BOLD}======================================================${CLR}"
 echo
-echo -e "${CYAN}How to run Spotify SpotX:${CLR}"
+echo -e "${CYAN}How to manage Spotify SpotX:${CLR}"
 echo -e "  1. Make sure you have installed the ${BOLD}Termux-X11 APK${CLR} on your Android device."
 echo -e "     (Download: https://github.com/termux/termux-x11/releases)"
 echo -e "  2. In Termux, simply type:"
-echo -e "     ${BOLD}${GREEN}spotify${CLR}         - Avvia Spotify SpotX"
-echo -e "     ${BOLD}${GREEN}spotify-update${CLR}  - Aggiorna Spotify o ri-applica la patch SpotX"
+echo -e "     ${BOLD}${GREEN}spotify${CLR}           - Avvia Spotify SpotX"
+echo -e "     ${BOLD}${GREEN}spotify-update${CLR}    - Aggiorna Spotify o ri-applica la patch SpotX"
+echo -e "     ${BOLD}${GREEN}spotify-uninstall${CLR} - Disinstalla o esegui la pulizia"
 echo -e "  3. Or tap the ${BOLD}Spotify${CLR} widget on your home screen via Termux:Widget."
 echo
 echo -e "${YELLOW}Tips for the best experience:${CLR}"

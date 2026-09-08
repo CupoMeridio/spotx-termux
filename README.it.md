@@ -123,11 +123,49 @@ Lo script verifica la versione installata rispetto a quella più recente del rep
 
 ---
 
+## 🗑️ Disinstallazione e Pulizia
+
+Se desideri rimuovere o fare pulizia dei componenti di SpotX-Termux, puoi utilizzare l'utility modulare integrata:
+
+```bash
+spotify-uninstall
+```
+
+*(oppure `bash uninstall.sh`, o tramite one-liner `curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/uninstall.sh | bash`)*
+
+### Opzioni del Menu Interattivo:
+1. **Disinstallazione Completa (`--full` / `-f`)**:
+   - Termina tutti i processi attivi di Spotify, Termux-X11 e PulseAudio.
+   - Elimina completamente il container Ubuntu PRoot (**liberando oltre 1 GB di spazio**).
+   - Rimuove tutti i comandi (`spotify`, `spotify-update`, `spotify-uninstall`) e le scorciatoie di Termux:Widget.
+   - Chiede facoltativamente se disinstallare anche i pacchetti Termux non più utilizzati (`termux-x11-nightly`, `pulseaudio`).
+2. **Rimuovere solo Spotify & SpotX (`--keep-ubuntu` / `--spotify-only`)**:
+   - Disinstalla Spotify, Box64, la mod SpotX e le cartelle di cache/configurazione dentro Ubuntu.
+   - Rimuove i lanciatori di Spotify da Termux.
+   - **Mantiene intatto il container Ubuntu** per poterlo utilizzare con altri programmi o progetti.
+3. **Ripristinare solo il client ufficiale (`--spotx-only` / `-s`)**:
+   - Rimuove la patch SpotX e ripristina la versione stock originale e non modificata di Spotify Desktop.
+   - Mantiene Spotify e il container funzionanti.
+4. **Pulizia Cache e File Temporanei (`--clean-cache` / `-c`)**:
+   - Elimina la cache utente di Spotify e gli archivi APT per recuperare spazio su disco senza disinstallare nulla.
+5. **Rimuovere solo i launcher di Termux (`--launchers-only` / `-l`)**:
+   - Rimuove i comandi wrapper e il widget home screen, preservando il container e Spotify.
+
+### Modalità non interattiva (CLI / Script):
+```bash
+spotify-uninstall --full -y        # Rimuove tutto automaticamente senza richieste di conferma
+spotify-uninstall --clean-cache    # Pulizia rapida della cache per liberare spazio
+spotify-uninstall --spotx-only     # Ripristina Spotify stock ufficiale
+```
+
+---
+
 ## ⚙️ Struttura dei File
 
 ```
 spotx-termux/
 ├── install.sh              # Script di installazione principale
+├── uninstall.sh            # Script modulare di pulizia e disinstallazione
 ├── README.md               # Documentazione ufficiale (Inglese)
 ├── README.it.md            # Documentazione (Italiano)
 └── src/
