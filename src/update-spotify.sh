@@ -136,20 +136,40 @@ fi
 chmod +x "$CONTAINER_SETUP_STAGING"
 
 if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
-    # Refresh host launcher start-spotify.sh
-    START_SCRIPT_LOCAL=""
-    if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/start-spotify.sh" ]; then
-        START_SCRIPT_LOCAL="${SCRIPT_DIR}/start-spotify.sh"
-    elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/start-spotify.sh" ]; then
-        START_SCRIPT_LOCAL="${SCRIPT_DIR}/src/start-spotify.sh"
-    fi
-    START_SCRIPT_DEST="${HOME}/start-spotify.sh"
-    if [ -n "$START_SCRIPT_LOCAL" ] && [ -f "$START_SCRIPT_LOCAL" ]; then
-        cp "$START_SCRIPT_LOCAL" "$START_SCRIPT_DEST"
+    # Ensure Termux allows external apps
+    mkdir -p "${HOME}/.termux"
+    if grep -q "^[[:space:]]*allow-external-apps" "${HOME}/.termux/termux.properties" 2>/dev/null; then
+        sed -i 's/^[[:space:]]*allow-external-apps[[:space:]]*=.*/allow-external-apps = true/' "${HOME}/.termux/termux.properties"
     else
-        curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/start-spotify.sh?t=$(date +%s)" -o "$START_SCRIPT_DEST" 2>/dev/null || true
+        echo "allow-external-apps = true" >> "${HOME}/.termux/termux.properties"
     fi
-    chmod +x "$START_SCRIPT_DEST" 2>/dev/null || true
+    termux-reload-settings >/dev/null 2>&1 || true
+
+    # Helper function to refresh a host script from local repo or remote GitHub
+    sync_host_script() {
+        local local_rel="$1"
+        local remote_rel="$2"
+        local dest_file="$3"
+        local local_file=""
+
+        if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/${local_rel}" ]; then
+            local_file="${SCRIPT_DIR}/${local_rel}"
+        elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/${local_rel}" ]; then
+            local_file="${SCRIPT_DIR}/src/${local_rel}"
+        fi
+
+        if [ -n "$local_file" ] && [ -f "$local_file" ]; then
+            cp "$local_file" "$dest_file"
+        else
+            curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/${remote_rel}?t=$(date +%s)" -o "$dest_file" 2>/dev/null || true
+        fi
+        chmod +x "$dest_file" 2>/dev/null || true
+    }
+
+    info "Synchronizing host scripts and configuration..."
+    sync_host_script "start-spotify.sh" "src/start-spotify.sh" "${HOME}/start-spotify.sh"
+    sync_host_script "update-spotify.sh" "src/update-spotify.sh" "${HOME}/update-spotify.sh"
+    sync_host_script "uninstall.sh" "uninstall.sh" "${HOME}/uninstall-spotify.sh"
 
     # Terminate running Spotify processes to avoid file conflicts during update
     pkill -x spotify 2>/dev/null || true

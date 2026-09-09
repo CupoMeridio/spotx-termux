@@ -97,15 +97,20 @@ Se hai installato il plugin **Termux:Widget**, aggiungi un widget di Termux sull
 
 ## 🔄 Aggiornamento e Manutenzione
 
-Spotify e SpotX possono essere aggiornati in qualsiasi momento senza reinstallare l'intero ambiente container:
+Spotify, SpotX e l'intera configurazione dell'ambiente (impostazioni Box64, nuove librerie native e launcher Termux) possono essere aggiornati in qualsiasi momento senza perdere dati e senza reinstallare il container:
 
 ```bash
 spotify-update
 ```
 
-Lo script verifica la versione installata rispetto a quella più recente del repository APT Spotify:
-- Se Spotify è già aggiornato, **salta il download (~150 MB risparmiati)** e verifica/ri-applica solo la patch SpotX se necessario.
-- Se è disponibile una nuova versione, scarica il nuovo pacchetto deb, ne verifica l'integrità SHA256, lo estrae e applica la patch SpotX.
+### Cosa viene aggiornato:
+1. **Ambiente del Container:** Scarica l'ultima configurazione di sistema, installa eventuali nuove librerie richieste (`libpci3`, `mesa-vulkan-drivers`, ecc.), sincronizza `/etc/box64.box64rc` e aggiorna il runner `/usr/local/bin/spotify-termux`.
+2. **Script Host Termux:** Aggiorna all'ultima versione `~/start-spotify.sh`, `~/update-spotify.sh`, `~/uninstall-spotify.sh` e le impostazioni di Termux.
+3. **Spotify e SpotX:** Verifica la versione installata rispetto a quella del repository Spotify:
+   - Se Spotify è già aggiornato, **salta il download (~150 MB risparmiati)** e rinnova la patch SpotX.
+   - Se è disponibile una nuova versione, scarica il pacchetto deb, ne verifica l'integrità SHA256, lo estrae e applica SpotX.
+
+> 💡 **Suggerimento:** È possibile rilanciare in qualsiasi momento anche il comando di installazione inline (`curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh | bash`). L'installer è **completamente idempotente**: riconosce che il container Ubuntu è già presente (quindi non lo elimina né riscarica da zero), salta il download dei file già aggiornati e sincronizza all'istante tutti gli script e le configurazioni in una quindicina di secondi.
 
 ### Opzioni di comando:
 - **Verificare solo la versione** (nessuna modifica al sistema):

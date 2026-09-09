@@ -97,15 +97,20 @@ If you installed the **Termux:Widget** plugin, add a Termux widget to your phone
 
 ## 🔄 Updating & Maintenance
 
-Spotify and SpotX can be updated anytime without reinstalling the entire container:
+Spotify, SpotX, and the entire runtime environment (Box64 configs, native libraries, and Termux launchers) can be kept up to date anytime without reinstalling or losing data:
 
 ```bash
 spotify-update
 ```
 
-The script checks your installed version against the latest package in the Spotify APT repository:
-- If Spotify is up to date, it **skips downloading (~150 MB saved)** and only reapplies the SpotX patch if needed.
-- If a new version is available, it downloads the deb package, verifies its SHA256 integrity, unpacks it, and applies SpotX.
+### What gets updated:
+1. **Container & Environment:** Automatically fetches the latest environment configuration, installs any newly added libraries (`libpci3`, `mesa-vulkan-drivers`, etc.), syncs `/etc/box64.box64rc`, and updates `/usr/local/bin/spotify-termux`.
+2. **Host Launchers:** Refreshes `~/start-spotify.sh`, `~/update-spotify.sh`, `~/uninstall-spotify.sh`, and Termux properties.
+3. **Spotify & SpotX:** Checks your installed version against the latest package in the Spotify APT repository:
+   - If Spotify is up to date, it **skips downloading (~150 MB saved)** and reapplies the latest SpotX patch.
+   - If a new Spotify version is available, it downloads the deb package, verifies SHA256 integrity, unpacks it, and applies SpotX.
+
+> 💡 **Tip:** You can also re-run the main inline installation command at any time (`curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh | bash`). The installer is **completely idempotent**: it detects your existing Ubuntu container without wiping it, skips downloading existing packages, and quickly brings all scripts and configurations up to date in seconds.
 
 ### Command Options:
 - **Check versions only** (no changes made):
