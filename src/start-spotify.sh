@@ -123,7 +123,10 @@ cleanup() {
     pkill -x spotify 2>/dev/null || true
     pkill -f "/usr/share/spotify/spotify" 2>/dev/null || true
     pkill -f "/usr/local/bin/spotify-termux" 2>/dev/null || true
+    
+    # Suppress bash job control output by disowning before kill
     if [ -n "${SPOTIFY_PID:-}" ]; then
+        disown "$SPOTIFY_PID" 2>/dev/null || true
         kill -9 "$SPOTIFY_PID" 2>/dev/null || true
     fi
 
@@ -150,6 +153,7 @@ cleanup() {
     stty sane 2>/dev/null || true
 
     echo -e "${GREEN}${BOLD}[✔] SpotX Spotify closed cleanly.${CLR}"
+    exit 0
 }
 
 # Trap signals: Ctrl+C (INT), SIGTERM (TERM), SIGHUP (HUP), and normal script exit (EXIT)
@@ -157,7 +161,8 @@ trap cleanup EXIT INT TERM HUP
 
 # 5. Execute Spotify inside PRoot Ubuntu container in background
 echo -e "${GREEN}${BOLD}[✔] Starting Spotify in Ubuntu container...${CLR}"
-proot-distro login ubuntu --shared-tmp -- env DISPLAY=:0 PULSE_SERVER=tcp:127.0.0.1:4713 /usr/local/bin/spotify-termux "$@" &
+# Filter known PRoot futex warnings that occur when threads are killed
+proot-distro login ubuntu --shared-tmp -- env DISPLAY=:0 PULSE_SERVER=tcp:127.0.0.1:4713 /usr/local/bin/spotify-termux "$@" 2> >(grep -v "The futex facility returned an unexpected error code" >&2) &
 SPOTIFY_PID=$!
 
 # 6. Background watchdog: detect if Termux-X11 was closed from Android (e.g. Exit button on notification)
