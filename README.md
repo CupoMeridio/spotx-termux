@@ -91,7 +91,30 @@ spotify
 4. Launches Spotify inside Ubuntu PRoot with sandboxing flags adjusted for user-space (`--no-sandbox`).
 
 ### Launch via Home Screen Widget (Termux:Widget)
-If you installed the **Termux:Widget** plugin, add a Termux widget to your phone's home screen: you will find the `Spotify` shortcut to launch the entire stack with a single tap without opening the terminal.
+If you installed the **Termux:Widget** plugin, add a Termux widget to your phone's home screen: you will find the `Spotify` shortcut to launch the entire stack with a single tap, as well as `Spotify-Stop` to cleanly terminate everything without opening the terminal.
+
+---
+
+## 🛑 Closing Spotify & Lifecycle Management
+
+To provide an experience as close as possible to native Android applications, closing Spotify automatically shuts down audio drivers, display bridges, and background container processes to prevent battery drain:
+
+You can close Spotify using any of the following convenient methods:
+
+1. **Home Screen Widget (Termux:Widget) - One Tap**:
+   Tap the **`Spotify-Stop`** widget shortcut on your Android home screen. It immediately terminates Spotify, closes the Termux-X11 window, stops PulseAudio, releases the Android CPU wake-lock, and restores the terminal state.
+2. **Dedicated Terminal Command**:
+   Run anywhere in Termux:
+   ```bash
+   spotify-stop
+   ```
+   *(or `spotify --stop`)*
+3. **Android Notification ("Exit")**:
+   When Termux-X11 is running, pull down the Android notification shade and tap **Exit** on the persistent Termux-X11 notification. A background watchdog immediately detects the exit and closes all container Spotify processes and audio hardware bridges.
+4. **Spotify Window Close (GUI)**:
+   Closing Spotify from inside the UI (e.g. window close button or menu exit) automatically triggers a graceful teardown of PulseAudio and Termux-X11.
+5. **Keyboard Interrupt in Termux (`Ctrl+C`)**:
+   Pressing `Ctrl+C` in Termux cleanly intercepts the signal, terminates emulated Spotify processes, releases audio sinks, and restores the terminal prompt (`stty sane`) without freezing or locking up your shell.
 
 ---
 

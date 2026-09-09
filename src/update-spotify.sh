@@ -171,6 +171,27 @@ if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
     sync_host_script "update-spotify.sh" "src/update-spotify.sh" "${HOME}/update-spotify.sh"
     sync_host_script "uninstall.sh" "uninstall.sh" "${HOME}/uninstall-spotify.sh"
 
+    # Ensure spotify-stop wrapper exists in $BIN_DIR
+    HOST_BIN_DIR="${PREFIX:-/data/data/com.termux/files/usr}/bin"
+    mkdir -p "$HOST_BIN_DIR"
+    cat << 'STOP_CMD' > "${HOST_BIN_DIR}/spotify-stop"
+#!/usr/bin/env bash
+exec "$HOME/start-spotify.sh" --stop "$@"
+STOP_CMD
+    chmod +x "${HOST_BIN_DIR}/spotify-stop"
+
+    # Ensure Termux:Widget shortcuts are kept up to date
+    SHORTCUTS_DIR="${HOME}/.shortcuts"
+    if [ -d "$SHORTCUTS_DIR" ]; then
+        cp "${HOME}/start-spotify.sh" "${SHORTCUTS_DIR}/Spotify" 2>/dev/null || true
+        chmod +x "${SHORTCUTS_DIR}/Spotify" 2>/dev/null || true
+        cat << 'WIDGET_STOP' > "${SHORTCUTS_DIR}/Spotify-Stop"
+#!/usr/bin/env bash
+exec "$HOME/start-spotify.sh" --stop
+WIDGET_STOP
+        chmod +x "${SHORTCUTS_DIR}/Spotify-Stop" 2>/dev/null || true
+    fi
+
     # Terminate running Spotify processes to avoid file conflicts during update
     pkill -x spotify 2>/dev/null || true
 fi

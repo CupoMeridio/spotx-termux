@@ -168,12 +168,14 @@ remove_launchers() {
     info "Removing Termux launchers, wrappers, and shortcuts..."
     local files_to_remove=(
         "${BIN_DIR}/spotify"
+        "${BIN_DIR}/spotify-stop"
         "${BIN_DIR}/spotify-update"
         "${BIN_DIR}/spotify-uninstall"
         "${HOME}/start-spotify.sh"
         "${HOME}/update-spotify.sh"
         "${HOME}/uninstall-spotify.sh"
         "${SHORTCUTS_DIR}/Spotify"
+        "${SHORTCUTS_DIR}/Spotify-Stop"
     )
 
     for file in "${files_to_remove[@]}"; do
@@ -272,8 +274,8 @@ action_full_uninstall() {
     warn "This operation will completely remove:"
     echo -e "  - All running Spotify, PulseAudio, and Termux-X11 processes"
     echo -e "  - The entire PRoot container '${BOLD}${CONTAINER_NAME}${CLR}' (~1+ GB of storage freed)"
-    echo -e "  - All Spotify launchers (${BOLD}spotify${CLR}, ${BOLD}spotify-update${CLR}, ${BOLD}spotify-uninstall${CLR})"
-    echo -e "  - Home screen widget shortcut (${BOLD}~/.shortcuts/Spotify${CLR})"
+    echo -e "  - All Spotify commands (${BOLD}spotify${CLR}, ${BOLD}spotify-stop${CLR}, ${BOLD}spotify-update${CLR}, ${BOLD}spotify-uninstall${CLR})"
+    echo -e "  - Home screen widget shortcuts (${BOLD}Spotify${CLR}, ${BOLD}Spotify-Stop${CLR})"
     echo
 
     if ! confirm_action "Do you want to proceed with FULL removal?"; then
@@ -332,8 +334,8 @@ show_interactive_menu() {
     echo -e "${WHITE}${BOLD}Select a cleanup option:${CLR}\n"
     echo -e "  ${GREEN}${BOLD}1)${CLR} ${BOLD}Full Uninstallation${CLR} ${YELLOW}[Recommended to remove everything]${CLR}"
     echo -e "     - Deletes Ubuntu container (~1+ GB freed)"
-    echo -e "     - Removes all commands ('spotify', 'spotify-update', 'spotify-uninstall')"
-    echo -e "     - Removes home screen widget shortcut"
+    echo -e "     - Removes all commands ('spotify', 'spotify-stop', 'spotify-update', 'spotify-uninstall')"
+    echo -e "     - Removes home screen widget shortcuts ('Spotify', 'Spotify-Stop')"
     echo
     echo -e "  ${CYAN}${BOLD}2)${CLR} ${BOLD}Remove Spotify & SpotX only${CLR} ${YELLOW}[Preserves Ubuntu container]${CLR}"
     echo -e "     - Removes Spotify, SpotX, and caches inside container"

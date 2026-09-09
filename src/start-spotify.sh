@@ -12,21 +12,61 @@ CYAN='\033[0;36m'
 YELLOW='\033[0;33m'
 RED='\033[0;31m'
 
-echo -e "${CYAN}${BOLD}[*] Launching SpotX Spotify on Android Termux...${CLR}"
+TERMUX_TMP="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
 
+# ------------------------------------------------------------------------------
+# Handle Stop / Kill invocation (e.g. 'spotify --stop' or 'spotify-stop')
+# ------------------------------------------------------------------------------
+if [ "${1:-}" = "--stop" ] || [ "${1:-}" = "stop" ] || [ "${1:-}" = "-k" ] || [ "${1:-}" = "--kill" ]; then
+    echo -e "${YELLOW}${BOLD}[*] Stopping SpotX Spotify and background services...${CLR}"
+
+    # Terminate Spotify client processes
+    pkill -x spotify 2>/dev/null || true
+    pkill -f "/usr/share/spotify/spotify" 2>/dev/null || true
+    pkill -f "/usr/local/bin/spotify-termux" 2>/dev/null || true
+    sleep 0.2
+    pkill -9 -x spotify 2>/dev/null || true
+    pkill -9 -f "/usr/share/spotify/spotify" 2>/dev/null || true
+
+    # Terminate Termux-X11 display server and close Android app
+    am broadcast -a com.termux.x11.ACTION_STOP -p com.termux.x11 > /dev/null 2>&1 || true
+    pkill -f "termux.x11" 2>/dev/null || true
+    pkill -f "termux-x11" 2>/dev/null || true
+    rm -f "${TERMUX_TMP}/.X0-lock" "${TERMUX_TMP}/.X11-unix/X0" 2>/dev/null || true
+
+    # Stop PulseAudio to close audio hardware device and save battery
+    if command -v pulseaudio >/dev/null 2>&1; then
+        pulseaudio -k 2>/dev/null || true
+    fi
+    pkill -x pulseaudio 2>/dev/null || true
+
+    # Release Android CPU wake-lock
+    if command -v termux-wake-unlock > /dev/null 2>&1; then
+        termux-wake-unlock 2>/dev/null || true
+    fi
+
+    # Restore terminal mode
+    stty sane 2>/dev/null || true
+
+    echo -e "${GREEN}${BOLD}[✔] SpotX Spotify stopped successfully.${CLR}"
+    exit 0
+fi
+
+# ------------------------------------------------------------------------------
 # Check prerequisites
+# ------------------------------------------------------------------------------
 if ! command -v proot-distro > /dev/null 2>&1; then
     echo -e "${RED}${BOLD}[✘] Error: proot-distro is not installed!${CLR}"
     echo -e "${YELLOW}Please run the installer first: bash install.sh${CLR}"
     exit 1
 fi
 
+echo -e "${CYAN}${BOLD}[*] Launching SpotX Spotify on Android Termux...${CLR}"
+
 # 0. Acquire Termux Wake-Lock to prevent Android CPU sleep when screen is off
 if command -v termux-wake-lock > /dev/null 2>&1; then
     termux-wake-lock 2>/dev/null || true
 fi
-
-TERMUX_TMP="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
 
 # 1. PulseAudio Audio Bridge (TCP 127.0.0.1 + OpenSL ES Android Sink)
 if ! pgrep -x "pulseaudio" > /dev/null 2>&1; then
@@ -67,6 +107,73 @@ echo -e "${CYAN}[+] Bringing Termux-X11 app to foreground...${CLR}"
 am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
 sleep 1
 
-# 4. Execute Spotify inside PRoot Ubuntu container
+# 4. Define cleanup handler for signals and exit
+cleanup() {
+    # Remove traps to prevent loops
+    trap - EXIT INT TERM HUP
+
+    echo -e "\n${YELLOW}[*] Shutting down SpotX Spotify and background services...${CLR}"
+
+    # Terminate watchdog loop if active
+    if [ -n "${WATCHDOG_PID:-}" ]; then
+        kill "$WATCHDOG_PID" 2>/dev/null || true
+    fi
+
+    # Terminate container Spotify processes
+    pkill -x spotify 2>/dev/null || true
+    pkill -f "/usr/share/spotify/spotify" 2>/dev/null || true
+    pkill -f "/usr/local/bin/spotify-termux" 2>/dev/null || true
+    if [ -n "${SPOTIFY_PID:-}" ]; then
+        kill -9 "$SPOTIFY_PID" 2>/dev/null || true
+    fi
+
+    # Close Termux-X11 Android app window
+    am broadcast -a com.termux.x11.ACTION_STOP -p com.termux.x11 > /dev/null 2>&1 || true
+
+    # Terminate Termux-X11 server and remove sockets
+    pkill -f "termux.x11" 2>/dev/null || true
+    pkill -f "termux-x11" 2>/dev/null || true
+    rm -f "${TERMUX_TMP}/.X0-lock" "${TERMUX_TMP}/.X11-unix/X0" 2>/dev/null || true
+
+    # Stop PulseAudio to save battery when not in use
+    if command -v pulseaudio >/dev/null 2>&1; then
+        pulseaudio -k 2>/dev/null || true
+    fi
+    pkill -x pulseaudio 2>/dev/null || true
+
+    # Release Android CPU wake-lock
+    if command -v termux-wake-unlock > /dev/null 2>&1; then
+        termux-wake-unlock 2>/dev/null || true
+    fi
+
+    # Restore terminal mode
+    stty sane 2>/dev/null || true
+
+    echo -e "${GREEN}${BOLD}[✔] SpotX Spotify closed cleanly.${CLR}"
+}
+
+# Trap signals: Ctrl+C (INT), SIGTERM (TERM), SIGHUP (HUP), and normal script exit (EXIT)
+trap cleanup EXIT INT TERM HUP
+
+# 5. Execute Spotify inside PRoot Ubuntu container in background
 echo -e "${GREEN}${BOLD}[✔] Starting Spotify in Ubuntu container...${CLR}"
-exec proot-distro login ubuntu --shared-tmp -- env DISPLAY=:0 PULSE_SERVER=tcp:127.0.0.1:4713 /usr/local/bin/spotify-termux "$@"
+proot-distro login ubuntu --shared-tmp -- env DISPLAY=:0 PULSE_SERVER=tcp:127.0.0.1:4713 /usr/local/bin/spotify-termux "$@" &
+SPOTIFY_PID=$!
+
+# 6. Background watchdog: detect if Termux-X11 was closed from Android (e.g. Exit button on notification)
+(
+    # Allow Spotify and X11 to stabilize initially
+    sleep 5
+    while kill -0 "$SPOTIFY_PID" 2>/dev/null; do
+        if ! pgrep -f "termux.x11" >/dev/null 2>&1 && ! pgrep -f "termux-x11" >/dev/null 2>&1; then
+            # Display server has been closed or stopped: shut down Spotify
+            kill "$SPOTIFY_PID" 2>/dev/null || true
+            break
+        fi
+        sleep 2
+    done
+) &
+WATCHDOG_PID=$!
+
+# Wait for Spotify process to finish
+wait "$SPOTIFY_PID" 2>/dev/null || true

@@ -182,7 +182,7 @@ rm -f "$CONTAINER_SETUP_STAGING"
 # 5. Install launcher scripts on Termux host
 info "Installing launcher scripts on Termux..."
 
-BIN_DIR="${PREFIX:-/usr}/bin"
+BIN_DIR="${PREFIX:-/data/data/com.termux/files/usr}/bin"
 mkdir -p "$BIN_DIR"
 
 START_SCRIPT_LOCAL=""
@@ -205,6 +205,14 @@ cat << 'RUN_CMD' > "$COMMAND_BIN"
 exec "$HOME/start-spotify.sh" "$@"
 RUN_CMD
 chmod +x "$COMMAND_BIN"
+
+# Create stop wrapper in $PREFIX/bin so user can just type 'spotify-stop'
+STOP_BIN="${BIN_DIR}/spotify-stop"
+cat << 'STOP_CMD' > "$STOP_BIN"
+#!/usr/bin/env bash
+exec "$HOME/start-spotify.sh" --stop "$@"
+STOP_CMD
+chmod +x "$STOP_BIN"
 
 # Install updater script and wrapper
 UPDATE_SCRIPT_LOCAL=""
@@ -253,7 +261,12 @@ SHORTCUTS_DIR="${HOME}/.shortcuts"
 mkdir -p "$SHORTCUTS_DIR"
 cp "$START_SCRIPT_DEST" "${SHORTCUTS_DIR}/Spotify"
 chmod +x "${SHORTCUTS_DIR}/Spotify"
-success "Termux:Widget shortcut created at ${SHORTCUTS_DIR}/Spotify"
+cat << 'WIDGET_STOP' > "${SHORTCUTS_DIR}/Spotify-Stop"
+#!/usr/bin/env bash
+exec "$HOME/start-spotify.sh" --stop
+WIDGET_STOP
+chmod +x "${SHORTCUTS_DIR}/Spotify-Stop"
+success "Termux:Widget shortcuts created: 'Spotify' and 'Spotify-Stop'"
 
 # 6. Summary and Instructions
 echo
@@ -266,9 +279,10 @@ echo -e "  1. Make sure you have installed the ${BOLD}Termux-X11 APK${CLR} on yo
 echo -e "     (Download: https://github.com/termux/termux-x11/releases)"
 echo -e "  2. In Termux, simply type:"
 echo -e "     ${BOLD}${GREEN}spotify${CLR}           - Avvia Spotify SpotX"
+echo -e "     ${BOLD}${GREEN}spotify-stop${CLR}      - Chiude Spotify e tutti i processi in background"
 echo -e "     ${BOLD}${GREEN}spotify-update${CLR}    - Aggiorna Spotify o ri-applica la patch SpotX"
 echo -e "     ${BOLD}${GREEN}spotify-uninstall${CLR} - Disinstalla o esegui la pulizia"
-echo -e "  3. Or tap the ${BOLD}Spotify${CLR} widget on your home screen via Termux:Widget."
+echo -e "  3. Or tap ${BOLD}Spotify${CLR} / ${BOLD}Spotify-Stop${CLR} on your home screen via Termux:Widget."
 echo
 echo -e "${YELLOW}Tips for the best experience:${CLR}"
 echo -e "  * Disable Android battery optimization for Termux so audio playback is not paused."

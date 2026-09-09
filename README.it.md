@@ -91,7 +91,30 @@ spotify
 4. Spotify viene avviato dentro Ubuntu PRoot con i flag di sandboxing disattivati (`--no-sandbox`).
 
 ### Avvio con Widget da Home Screen (Termux:Widget)
-Se hai installato il plugin **Termux:Widget**, aggiungi un widget di Termux sulla home del tuo smartphone: troverai direttamente la scorciatoia `Spotify` per avviare il tutto con un solo tocco senza aprire il terminale.
+Se hai installato il plugin **Termux:Widget**, aggiungi un widget di Termux sulla home del tuo smartphone: troverai sia la scorciatoia `Spotify` per avviare il tutto con un solo tocco, sia `Spotify-Stop` per terminare tutti i processi pulitamente senza aprire il terminale.
+
+---
+
+## 🛑 Chiusura dell'Applicazione e Gestione del Ciclo di Vita
+
+Per offrire un'esperienza quanto più vicina possibile a quella di un'applicazione Android nativa, la chiusura di Spotify provvede a terminare automaticamente l'interfaccia grafica, i driver audio e i processi nel container PRoot, azzerando il consumo di batteria in background:
+
+Puoi chiudere Spotify scegliendo una qualsiasi delle seguenti modalità:
+
+1. **Scorciatoia da Schermo Home (Termux:Widget) - 1 Tocco**:
+   Tocca il widget **`Spotify-Stop`** sulla tua schermata home. Chiude immediatamente Spotify, chiude la finestra dell'app Termux-X11, arresta il server PulseAudio, rilascia il wake-lock della CPU di Android e ripristina il terminale.
+2. **Comando Dedicato da Terminale**:
+   Scrivi semplicemente in Termux:
+   ```bash
+   spotify-stop
+   ```
+   *(oppure `spotify --stop`)*
+3. **Notifica di Sistema Android ("Exit")**:
+   Mentre Termux-X11 è aperto, abbassa la tendina delle notifiche di Android e premi **Exit** sulla notifica persistente di Termux-X11. Il watchdog in background rileverà l'uscita in tempo reale arrestando Spotify e i driver audio.
+4. **Chiusura della Finestra (Interfaccia Grafica)**:
+   Chiudendo Spotify direttamente dalla sua interfaccia grafica (pulsante di chiusura o voce esci dal menu), lo script intercetta la fine del processo e chiude automaticamente Termux-X11 e PulseAudio.
+5. **Interruzione da Terminale (`Ctrl+C`)**:
+   Premendo `Ctrl+C` nella finestra di Termux, il segnale viene catturato correttamente arrestando tutti i thread emulati, spegnendo l'audio e ripristinando all'istante il prompt (`stty sane`) senza alcun blocco o freeze del terminale.
 
 ---
 
