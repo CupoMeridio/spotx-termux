@@ -170,8 +170,11 @@ SPOTIFY_PID=$!
     # Allow Spotify and X11 to stabilize initially
     sleep 5
     while kill -0 "$SPOTIFY_PID" 2>/dev/null; do
-        if ! pgrep -f "termux.x11" >/dev/null 2>&1 && ! pgrep -f "termux-x11" >/dev/null 2>&1; then
-            # Display server has been closed or stopped: shut down Spotify
+        # Check if the Termux-X11 Android app (com.termux.x11) is still running.
+        # We don't check the server (termux-x11) because it stays alive even if the app is swiped away.
+        # Using [c] to prevent pgrep from matching its own process.
+        if ! pgrep -f "[c]om\.termux\.x11" >/dev/null 2>&1; then
+            # Display app has been closed or stopped: shut down Spotify
             kill "$SPOTIFY_PID" 2>/dev/null || true
             break
         fi
