@@ -411,13 +411,7 @@ cat << 'RUNNER' > /usr/local/bin/spotify-termux
 # spotify-termux - Environment and flags runner for Spotify inside PRoot
 # ==============================================================================
 export DISPLAY="${DISPLAY:-:0}"
-if [ -z "${PULSE_SERVER:-}" ]; then
-    if [ -S /tmp/pulse-socket ]; then
-        export PULSE_SERVER="unix:/tmp/pulse-socket"
-    else
-        export PULSE_SERVER="tcp:127.0.0.1:4713"
-    fi
-fi
+export PULSE_SERVER="${PULSE_SERVER:-tcp:127.0.0.1:4713}"
 export PULSE_LATENCY_MSEC="${PULSE_LATENCY_MSEC:-200}"
 export LIBGL_ALWAYS_SOFTWARE=1
 export GDK_BACKEND=x11
@@ -457,9 +451,6 @@ _SPOTX_FILTER='libayatana-appindicator is deprecated|cannot open /proc/bus/pci/d
     --force-device-scale-factor="$SCALE_FACTOR" \
     --disable-gpu \
     --disable-dev-shm-usage \
-    --disable-background-timer-throttling \
-    --disable-backgrounding-occluded-windows \
-    --disable-renderer-backgrounding \
     "$@" 2> >(grep -vE "$_SPOTX_FILTER" >&2)
 SPOTIFY_EXIT_CODE=$?
 
