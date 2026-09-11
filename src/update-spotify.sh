@@ -152,10 +152,13 @@ if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
         local dest_file="$3"
         local local_file=""
 
-        if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/${local_rel}" ]; then
-            local_file="${SCRIPT_DIR}/${local_rel}"
-        elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/${local_rel}" ]; then
-            local_file="${SCRIPT_DIR}/src/${local_rel}"
+        # Prevent falsely identifying the installed $HOME directory as a local git repository.
+        if [ "$SCRIPT_DIR" != "$HOME" ]; then
+            if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/${local_rel}" ]; then
+                local_file="${SCRIPT_DIR}/${local_rel}"
+            elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/${local_rel}" ]; then
+                local_file="${SCRIPT_DIR}/src/${local_rel}"
+            fi
         fi
 
         if [ -n "$local_file" ] && [ -f "$local_file" ]; then
