@@ -71,6 +71,26 @@ if command -v termux-wake-lock > /dev/null 2>&1; then
 fi
 
 # 1. PulseAudio Audio Bridge (TCP 127.0.0.1 + OpenSL ES Android Sink)
+PULSE_CONFIG_DIR="${HOME}/.config/pulse"
+mkdir -p "$PULSE_CONFIG_DIR"
+cat << 'PULSE_CONF' > "${PULSE_CONFIG_DIR}/daemon.conf"
+exit-idle-time = -1
+default-fragments = 8
+default-fragment-size-msec = 25
+resample-method = trivial
+default-sample-rate = 48000
+alternate-sample-rate = 44100
+default-sample-channels = 2
+high-priority = yes
+realtime-scheduling = no
+PULSE_CONF
+
+# If Spotify is not actively running, ensure PulseAudio daemon is reloaded with optimal configuration
+if ! pgrep -x "spotify" > /dev/null 2>&1 && ! pgrep -f "/usr/share/spotify/spotify" > /dev/null 2>&1; then
+    pulseaudio -k 2>/dev/null || true
+    sleep 0.1
+fi
+
 if ! pgrep -x "pulseaudio" > /dev/null 2>&1; then
     echo -e "${CYAN}[+] Starting PulseAudio daemon with OpenSL ES sink...${CLR}"
     pulseaudio --start \

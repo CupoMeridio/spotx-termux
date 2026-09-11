@@ -110,6 +110,20 @@ if [ "$IS_TERMUX" = true ]; then
         echo "allow-external-apps = true" >> "${HOME}/.termux/termux.properties"
     fi
     termux-reload-settings >/dev/null 2>&1 || true
+
+    # Pre-configure PulseAudio daemon settings for optimal Android latency and CPU performance
+    mkdir -p "${HOME}/.config/pulse"
+    cat << 'PULSE_CONF' > "${HOME}/.config/pulse/daemon.conf"
+exit-idle-time = -1
+default-fragments = 8
+default-fragment-size-msec = 25
+resample-method = trivial
+default-sample-rate = 48000
+alternate-sample-rate = 44100
+default-sample-channels = 2
+high-priority = yes
+realtime-scheduling = no
+PULSE_CONF
 fi
 
 # 3. Setup Ubuntu container via proot-distro

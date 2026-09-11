@@ -331,8 +331,11 @@ BOX64_DYNAREC=1
 BOX64_NOSANDBOX=1
 BOX64_INPROCESSGPU=0
 BOX64_MALLOC_HACK=2
-BOX64_DYNAREC_STRONGMEM=1
-BOX64_DYNAREC_BIGBLOCK=0
+BOX64_DYNAREC_STRONGMEM=0
+BOX64_DYNAREC_BIGBLOCK=1
+BOX64_DYNAREC_FASTNAN=1
+BOX64_DYNAREC_FASTROUND=1
+BOX64_DYNAREC_SAFEFLAGS=1
 BOX64RC
         # Fix /etc/box64.box64rc (installed by box64 package) to ensure BOX64_INPROCESSGPU is 0
         if [ -f /etc/box64.box64rc ]; then
@@ -356,8 +359,11 @@ export BOX64_DYNAREC=1
 export BOX64_NOSANDBOX=1
 export BOX64_INPROCESSGPU=0
 export BOX64_MALLOC_HACK=2
-export BOX64_DYNAREC_STRONGMEM=1
-export BOX64_DYNAREC_BIGBLOCK=0
+export BOX64_DYNAREC_STRONGMEM=0
+export BOX64_DYNAREC_BIGBLOCK=1
+export BOX64_DYNAREC_FASTNAN=1
+export BOX64_DYNAREC_FASTROUND=1
+export BOX64_DYNAREC_SAFEFLAGS=1
 export BOX64_LD_LIBRARY_PATH="/usr/share/spotify:${BOX64_LD_LIBRARY_PATH:-}"
 export LD_LIBRARY_PATH="/usr/share/spotify:${LD_LIBRARY_PATH:-}"
 exec box64 /usr/share/spotify/spotify "$@"
@@ -406,7 +412,7 @@ cat << 'RUNNER' > /usr/local/bin/spotify-termux
 # ==============================================================================
 export DISPLAY="${DISPLAY:-:0}"
 export PULSE_SERVER="${PULSE_SERVER:-tcp:127.0.0.1:4713}"
-export PULSE_LATENCY_MSEC=60
+export PULSE_LATENCY_MSEC="${PULSE_LATENCY_MSEC:-180}"
 export LIBGL_ALWAYS_SOFTWARE=1
 export GDK_BACKEND=x11
 
@@ -440,7 +446,12 @@ SCALE_FACTOR="${SPOTIFY_SCALE:-1.5}"
 #   - cannot open /proc/bus/pci/devices: libpci3 tries to scan the PCI bus for GPU
 #     detection; /proc/bus/pci does not exist on Android and libpci falls back safely.
 _SPOTX_FILTER='libayatana-appindicator is deprecated|cannot open /proc/bus/pci/devices'
-/usr/bin/spotify --start-maximized --force-device-scale-factor="$SCALE_FACTOR" "$@" 2> >(grep -vE "$_SPOTX_FILTER" >&2)
+/usr/bin/spotify \
+    --start-maximized \
+    --force-device-scale-factor="$SCALE_FACTOR" \
+    --disable-gpu \
+    --disable-dev-shm-usage \
+    "$@" 2> >(grep -vE "$_SPOTX_FILTER" >&2)
 SPOTIFY_EXIT_CODE=$?
 
 # Terminate window manager on exit
