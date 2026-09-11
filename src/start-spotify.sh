@@ -70,35 +70,49 @@ if command -v termux-wake-lock > /dev/null 2>&1; then
     termux-wake-lock 2>/dev/null || true
 fi
 
-# 1. PulseAudio Audio Bridge (TCP 127.0.0.1 + OpenSL ES Android Sink)
+# 1. PulseAudio Audio Bridge (UNIX Domain Socket + TCP Fallback + OpenSL ES Android Sink)
 PULSE_CONFIG_DIR="${HOME}/.config/pulse"
 mkdir -p "$PULSE_CONFIG_DIR"
 cat << 'PULSE_CONF' > "${PULSE_CONFIG_DIR}/daemon.conf"
 exit-idle-time = -1
 default-fragments = 8
 default-fragment-size-msec = 25
-resample-method = trivial
-default-sample-rate = 48000
-alternate-sample-rate = 44100
+resample-method = speex-float-0
+default-sample-rate = 44100
+alternate-sample-rate = 48000
 default-sample-channels = 2
 high-priority = yes
 realtime-scheduling = no
 PULSE_CONF
 
+PULSE_SOCK_DIR="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
+mkdir -p "$PULSE_SOCK_DIR"
+PULSE_SOCK_PATH="${PULSE_SOCK_DIR}/pulse-socket"
+
 # If Spotify is not actively running, ensure PulseAudio daemon is reloaded with optimal configuration
 if ! pgrep -x "spotify" > /dev/null 2>&1 && ! pgrep -f "/usr/share/spotify/spotify" > /dev/null 2>&1; then
-    pulseaudio -k 2>/dev/null || true
-    sleep 0.1
+    pulseaudio -k 2>/dev/null || pkill -x pulseaudio 2>/dev/null || true
+    for ((k=1; k<=10; k++)); do
+        if ! pgrep -x pulseaudio >/dev/null 2>&1; then
+            break
+        fi
+        sleep 0.1
+    done
+    pkill -9 -x pulseaudio 2>/dev/null || true
+    rm -f "$PULSE_SOCK_PATH" 2>/dev/null || true
 fi
 
 if ! pgrep -x "pulseaudio" > /dev/null 2>&1; then
     echo -e "${CYAN}[+] Starting PulseAudio daemon with OpenSL ES sink...${CLR}"
     pulseaudio --start \
+        --load="module-native-protocol-unix auth-anonymous=1 socket=${PULSE_SOCK_PATH}" \
         --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" \
         --load="module-sles-sink" \
         --exit-idle-time=-1 2>/dev/null || true
 else
-    # Ensure SLES sink is loaded even if pulse was started earlier
+    # Ensure SLES sink and protocol modules are loaded even if pulse was started earlier
+    pactl load-module module-native-protocol-unix auth-anonymous=1 socket="${PULSE_SOCK_PATH}" 2>/dev/null || true
+    pactl load-module module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 2>/dev/null || true
     pactl load-module module-sles-sink 2>/dev/null || true
 fi
 
@@ -162,6 +176,7 @@ cleanup() {
         pulseaudio -k 2>/dev/null || true
     fi
     pkill -x pulseaudio 2>/dev/null || true
+    rm -f "${PULSE_SOCK_PATH}" 2>/dev/null || true
 
     # Release Android CPU wake-lock
     if command -v termux-wake-unlock > /dev/null 2>&1; then
@@ -180,8 +195,15 @@ trap cleanup EXIT INT TERM HUP
 
 # 5. Execute Spotify inside PRoot Ubuntu container in background
 echo -e "${GREEN}${BOLD}[✔] Starting Spotify in Ubuntu container...${CLR}"
+
+# Determine optimal audio transport: UNIX domain socket (fastest, zero jitter) with TCP fallback
+PULSE_TARGET_SERVER="tcp:127.0.0.1:4713"
+if [ -S "${PULSE_SOCK_PATH}" ]; then
+    PULSE_TARGET_SERVER="unix:/tmp/pulse-socket"
+fi
+
 # Filter known PRoot futex warnings that occur when threads are killed
-proot-distro login ubuntu --shared-tmp -- env DISPLAY=:0 PULSE_SERVER=tcp:127.0.0.1:4713 /usr/local/bin/spotify-termux "$@" 2> >(grep -v "The futex facility returned an unexpected error code" >&2) &
+proot-distro login ubuntu --shared-tmp -- env DISPLAY=:0 PULSE_SERVER="${PULSE_TARGET_SERVER}" /usr/local/bin/spotify-termux "$@" 2> >(grep -v "The futex facility returned an unexpected error code" >&2) &
 SPOTIFY_PID=$!
 
 # Wait for Spotify process to finish

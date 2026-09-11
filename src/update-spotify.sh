@@ -195,8 +195,13 @@ WIDGET_STOP
         chmod +x "${SHORTCUTS_DIR}/Spotify-Stop" 2>/dev/null || true
     fi
 
-    # Terminate running Spotify processes to avoid file conflicts during update
+    # Terminate running Spotify and PulseAudio processes to avoid conflicts and reload daemon config
     pkill -x spotify 2>/dev/null || true
+    if command -v pulseaudio >/dev/null 2>&1; then
+        pulseaudio -k 2>/dev/null || true
+    fi
+    pkill -x pulseaudio 2>/dev/null || true
+    rm -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/pulse-socket" 2>/dev/null || true
 fi
 
 # Run inside PRoot container with appropriate flags
