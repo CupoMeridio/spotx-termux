@@ -180,6 +180,7 @@ apt-get install -y --no-install-recommends \
     libxkbcommon0 \
     xdg-utils \
     fonts-dejavu-core \
+    matchbox-window-manager \
     pulseaudio-utils || true
 
 # Install transitional/architecture libraries (handling Ubuntu 24.04 64-bit time_t suffix)
@@ -420,14 +421,34 @@ if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] || [ "${DBUS_SESSION_BUS_ADDRESS}" = "
     fi
 fi
 
-# Run Spotify with software rendering.
+# Launch Matchbox window manager to automatically adapt Spotify to full screen
+WM_PID=""
+if command -v matchbox-window-manager >/dev/null 2>&1; then
+    matchbox-window-manager -use_titlebar no &
+    WM_PID=$!
+elif command -v openbox >/dev/null 2>&1; then
+    openbox &
+    WM_PID=$!
+fi
+
+# Configure UI scaling factor for high-DPI smartphone touch screens (default: 1.5)
+SCALE_FACTOR="${SPOTIFY_SCALE:-1.5}"
+
 # Filter known benign warnings from stderr that are harmless on PRoot/Android:
 #   - libayatana-appindicator: deprecation notice emitted by the library at load time;
 #     the tray icon still works normally.
 #   - cannot open /proc/bus/pci/devices: libpci3 tries to scan the PCI bus for GPU
 #     detection; /proc/bus/pci does not exist on Android and libpci falls back safely.
 _SPOTX_FILTER='libayatana-appindicator is deprecated|cannot open /proc/bus/pci/devices'
-/usr/bin/spotify "$@" 2> >(grep -vE "$_SPOTX_FILTER" >&2)
+/usr/bin/spotify --start-maximized --force-device-scale-factor="$SCALE_FACTOR" "$@" 2> >(grep -vE "$_SPOTX_FILTER" >&2)
+SPOTIFY_EXIT_CODE=$?
+
+# Terminate window manager on exit
+if [ -n "$WM_PID" ]; then
+    kill "$WM_PID" 2>/dev/null || true
+fi
+
+exit $SPOTIFY_EXIT_CODE
 RUNNER
 
 chmod +x /usr/local/bin/spotify-termux

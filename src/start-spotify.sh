@@ -20,10 +20,12 @@ TERMUX_TMP="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
 if [ "${1:-}" = "--stop" ] || [ "${1:-}" = "stop" ] || [ "${1:-}" = "-k" ] || [ "${1:-}" = "--kill" ]; then
     echo -e "${YELLOW}${BOLD}[*] Stopping SpotX Spotify and background services...${CLR}"
 
-    # Terminate Spotify client processes
+    # Terminate Spotify and window manager processes
     pkill -x spotify 2>/dev/null || true
     pkill -f "/usr/share/spotify/spotify" 2>/dev/null || true
     pkill -f "/usr/local/bin/spotify-termux" 2>/dev/null || true
+    pkill -x matchbox-window-manager 2>/dev/null || true
+    pkill -x openbox 2>/dev/null || true
     sleep 0.2
     pkill -9 -x spotify 2>/dev/null || true
     pkill -9 -f "/usr/share/spotify/spotify" 2>/dev/null || true
@@ -114,10 +116,12 @@ cleanup() {
 
     echo -e "\n${YELLOW}[*] Shutting down SpotX Spotify and background services...${CLR}"
 
-    # Terminate container Spotify processes
+    # Terminate container Spotify and window manager processes
     pkill -x spotify 2>/dev/null || true
     pkill -f "/usr/share/spotify/spotify" 2>/dev/null || true
     pkill -f "/usr/local/bin/spotify-termux" 2>/dev/null || true
+    pkill -x matchbox-window-manager 2>/dev/null || true
+    pkill -x openbox 2>/dev/null || true
     
     # Suppress bash job control output by disowning before kill
     if [ -n "${SPOTIFY_PID:-}" ]; then

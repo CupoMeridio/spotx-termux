@@ -221,8 +221,13 @@ spotx-termux/
   *Perché:* Il classico pulsante "Accedi" tenta di aprire un browser web desktop di sistema tramite `xdg-open` per completare l'autenticazione OAuth esterna. Poiché all'interno del container minimale PRoot Ubuntu non è presente un browser web grafico, la richiesta fallisce silenziosamente o resta in attesa.
 * **Audio che si interrompe in background:**  
   Android applica restrizioni aggressive sul risparmio energetico. Vai nelle *Impostazioni Android > App > Termux > Batteria* e imposta **Senza restrizioni**.
+* **Adattamento a Schermo Intero e Scala Touch (DPI):**  
+  Spotify si adatta automaticamente all'intero display del telefono grazie al gestore finestre integrato *Matchbox*. Di default viene applicato un fattore di scala del 150% (`1.5`) per rendere tasti e copertine comodamente utilizzabili con il tocco.  
+  Se desideri ingrandire o rimpicciolire l'interfaccia, puoi definire la variabile `SPOTIFY_SCALE` prima del comando (es. `SPOTIFY_SCALE=1.75 spotify`) oppure usare la combinazione rapida **`Ctrl` + `+`** / **`Ctrl` + `-`** direttamente dentro Spotify.
+* **Orientamento Consigliato (Landscape / Orizzontale):**  
+  Spotify Desktop è progettato per layout orizzontali (PC/laptop). Ruotando lo smartphone in orizzontale l'interfaccia si distribuisce in modo ottimale con la barra laterale delle playlist a sinistra, il catalogo al centro e il player in basso.
 * **Controlli touch in Termux-X11:**  
-  Nelle impostazioni di Termux-X11 (accessibili scorrendo il pannello notifiche o con un swipe a 4 dita), puoi impostare il touchpad virtuale per un controllo fluido del cursore mouse.
+  Nelle impostazioni di Termux-X11 (accessibili toccando "Preferences" sulla notifica o con uno swipe a 4 dita), puoi impostare la modalità touchpad virtuale per un controllo fluido del cursore mouse.
 * **Schermo nero o crash all'avvio:**  
   Assicurati che l'app Termux-X11 sia installata e che le siano stati concessi i permessi richiesti.
 

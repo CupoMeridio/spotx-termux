@@ -221,6 +221,11 @@ spotx-termux/
   *Why:* The standard web-based "Log In" button attempts to launch a desktop web browser via `xdg-open` to complete an external OAuth authentication flow. Because the minimal PRoot Ubuntu container does not have a desktop browser installed, clicking that button will fail silently or hang.
 * **Audio cuts out in background:**  
   Android applies aggressive battery optimizations. Go to *Android Settings > Apps > Termux > Battery* and set it to **Unrestricted**.
+* **Fullscreen Auto-Fit & Touch Scaling (DPI):**  
+  Spotify automatically expands to fill 100% of your device's screen using the integrated *Matchbox* window manager. By default, a 150% UI scale factor (`1.5`) is applied for comfortable fingertip controls.  
+  To customize the UI scale, set `SPOTIFY_SCALE` before launching (e.g. `SPOTIFY_SCALE=1.75 spotify`) or press **`Ctrl` + `+`** / **`Ctrl` + `-`** directly inside Spotify.
+* **Recommended Orientation (Landscape):**  
+  Spotify Desktop is designed for widescreen PC layouts. Rotating your smartphone horizontally (landscape) lets the interface breathe naturally with the playlist sidebar on the left, music catalog in the center, and player bar along the bottom.
 * **Touch controls in Termux-X11:**  
   In the Termux-X11 in-app preferences (accessible from notification panel or 4-finger swipe), enable virtual touchpad mode for precise mouse control.
 * **Black screen or launch crashes:**  
