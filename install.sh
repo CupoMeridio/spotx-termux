@@ -272,10 +272,9 @@ exec "$HOME/start-spotify.sh" --stop
 WIDGET_STOP
 chmod +x "${SHORTCUTS_DIR}/Spotify-Stop"
 
-# Download Spotify icon for Termux:Widget (using a highly reliable initials API as fallback if PNG is needed)
-info "Downloading icons for Termux:Widget..."
-# We use DiceBear to generate a clean "Sp" green icon (128x128 PNG) which is 100% compatible with Termux:Widget
-curl -sSL "https://api.dicebear.com/7.x/initials/png?seed=Sp&backgroundColor=1db954" -o "${ICONS_DIR}/Spotify.png" 2>/dev/null || true
+# Download Spotify icon for Termux:Widget from the project repository
+info "Downloading icon for Termux:Widget..."
+curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/spotify-icon.png?t=$(date +%s)" -o "${ICONS_DIR}/Spotify.png" 2>/dev/null || true
 cp "${ICONS_DIR}/Spotify.png" "${ICONS_DIR}/Spotify-Stop.png" 2>/dev/null || true
 success "Termux:Widget shortcuts created: 'Spotify' and 'Spotify-Stop'"
 
