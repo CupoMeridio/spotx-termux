@@ -267,7 +267,7 @@ chmod +x "${SHORTCUTS_DIR}/Spotify"
 
 # Create Spotify-Stop shortcut
 cat << 'WIDGET_STOP' > "${SHORTCUTS_DIR}/Spotify-Stop"
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 exec "$HOME/start-spotify.sh" --stop
 WIDGET_STOP
 chmod +x "${SHORTCUTS_DIR}/Spotify-Stop"

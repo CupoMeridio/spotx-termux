@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
 # start-spotify.sh - Termux host launcher for SpotX Spotify on real Android hardware
 # ==============================================================================
