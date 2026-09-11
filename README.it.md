@@ -91,30 +91,40 @@ spotify
 4. Spotify viene avviato dentro Ubuntu PRoot con i flag di sandboxing disattivati (`--no-sandbox`).
 
 ### Avvio con Widget da Home Screen (Termux:Widget)
-Se hai installato il plugin **Termux:Widget**, aggiungi un widget di Termux sulla home del tuo smartphone: troverai sia la scorciatoia `Spotify` per avviare il tutto con un solo tocco, sia `Spotify-Stop` per terminare tutti i processi pulitamente senza aprire il terminale.
+Se hai installato il plugin **Termux:Widget**, puoi avviare Spotify con un singolo tocco dalla home del tuo smartphone.
+
+> ⚠️ **Importante: Permessi Android**
+> Per permettere a Termux:Widget di lanciare processi in background (come Termux-X11) senza dover aprire obbligatoriamente l'interfaccia testuale di Termux, **devi concedere a Termux il permesso "Mostra sopra le altre app" (Display over other apps)** nelle Impostazioni di Android.
+
+**Come aggiungere i bottoni alla Home:**
+1. **Tieni premuto** su uno spazio vuoto della tua schermata Home.
+2. Apri il menù **Widget**.
+3. Scorri fino a trovare **Termux:Widget** e seleziona la voce **Termux:Widget Shortcut** (il quadratino 1x1).
+4. Trascinalo sulla tua Home.
+5. Dal menù a tendina che comparirà, seleziona **`Spotify`** per aggiungere il tasto di avvio.
+6. Ripeti l'operazione selezionando **`Spotify-Stop`** per aggiungere il tasto di chiusura.
 
 ---
 
 ## 🛑 Chiusura dell'Applicazione e Gestione del Ciclo di Vita
 
-Per offrire un'esperienza quanto più vicina possibile a quella di un'applicazione Android nativa, la chiusura di Spotify provvede a terminare automaticamente l'interfaccia grafica, i driver audio e i processi nel container PRoot, azzerando il consumo di batteria in background:
+Per garantire la corretta gestione delle risorse su Android, la chiusura di Spotify provvede a terminare ordinatamente l'interfaccia grafica, i driver audio e i processi nel container PRoot, azzerando il consumo di batteria in background.
 
-Puoi chiudere Spotify scegliendo una qualsiasi delle seguenti modalità:
+> ℹ️ **Nota sul Gestore Applicazioni Recenti di Android (Swipe / Chiusura)**  
+> In Android, trascinare o "swipare" via la finestra di Termux-X11 dalla schermata delle **App Recenti** (Gestore Applicazioni) **NON arresta Spotify né interrompe la riproduzione musicale**.  
+> Termux-X11 viene infatti eseguito come servizio in primo piano protetto da una notifica persistente: lo swipe chiude soltanto la visualizzazione grafica a schermo, ma non termina il processo sottostante. Questo comportamento è del tutto identico a quello dell'app nativa di Spotify per Android (che continua a riprodurre audio anche se rimossa dalle app recenti).  
+> Per arrestare definitivamente la musica, chiudere i processi ed evitare consumo di batteria, utilizza una delle seguenti modalità:
 
-1. **Scorciatoia da Schermo Home (Termux:Widget) - 1 Tocco**:
-   Tocca il widget **`Spotify-Stop`** sulla tua schermata home. Chiude immediatamente Spotify, chiude la finestra dell'app Termux-X11, arresta il server PulseAudio, rilascia il wake-lock della CPU di Android e ripristina il terminale.
+1. **Scorciatoia da Schermo Home (Termux:Widget) - 1 Tocco (Consigliata)**:
+   Tocca il widget **`Spotify-Stop`** sulla tua schermata home. Chiude immediatamente Spotify, invia la richiesta di chiusura all'app Termux-X11, arresta il server PulseAudio, rilascia il wake-lock della CPU di Android e ripristina il terminale.
 2. **Comando Dedicato da Terminale**:
    Scrivi semplicemente in Termux:
    ```bash
    spotify-stop
    ```
    *(oppure `spotify --stop`)*
-3. **Notifica di Sistema Android ("Exit")**:
-   Mentre Termux-X11 è aperto, abbassa la tendina delle notifiche di Android e premi **Exit** sulla notifica persistente di Termux-X11. Il watchdog in background rileverà l'uscita in tempo reale arrestando Spotify e i driver audio.
-4. **Chiusura della Finestra (Interfaccia Grafica)**:
-   Chiudendo Spotify direttamente dalla sua interfaccia grafica (pulsante di chiusura o voce esci dal menu), lo script intercetta la fine del processo e chiude automaticamente Termux-X11 e PulseAudio.
-5. **Interruzione da Terminale (`Ctrl+C`)**:
-   Premendo `Ctrl+C` nella finestra di Termux, il segnale viene catturato correttamente arrestando tutti i thread emulati, spegnendo l'audio e ripristinando all'istante il prompt (`stty sane`) senza alcun blocco o freeze del terminale.
+3. **Interruzione da Terminale (`Ctrl+C`)**:
+   Se hai lanciato Spotify in modalità interattiva, premendo `Ctrl+C` nella finestra di Termux il segnale viene catturato correttamente arrestando tutti i thread emulati, spegnendo l'audio e ripristinando all'istante il prompt (`stty sane`) in modo pulito.
 
 ---
 

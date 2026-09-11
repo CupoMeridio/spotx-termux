@@ -91,30 +91,40 @@ spotify
 4. Launches Spotify inside Ubuntu PRoot with sandboxing flags adjusted for user-space (`--no-sandbox`).
 
 ### Launch via Home Screen Widget (Termux:Widget)
-If you installed the **Termux:Widget** plugin, add a Termux widget to your phone's home screen: you will find the `Spotify` shortcut to launch the entire stack with a single tap, as well as `Spotify-Stop` to cleanly terminate everything without opening the terminal.
+If you installed the **Termux:Widget** plugin, you can launch Spotify with a single tap from your Android home screen.
+
+> ⚠️ **Important: Android Permissions**
+> To allow Termux:Widget to launch apps in the background (like Termux-X11) without bringing the terminal to the foreground, you **must grant the "Display over other apps" (or "Draw over other apps") permission to the Termux app** in your Android Settings.
+
+**How to add the buttons to your Home Screen:**
+1. Long-press on an empty space on your Android Home Screen.
+2. Open the **Widgets** menu.
+3. Scroll down to find **Termux:Widget** and select the **Termux:Widget Shortcut** (1x1).
+4. Drag and drop it onto your Home Screen.
+5. A list will appear: select **`Spotify`** to add the play button.
+6. Repeat the process and select **`Spotify-Stop`** to add the stop button.
 
 ---
 
 ## 🛑 Closing Spotify & Lifecycle Management
 
-To provide an experience as close as possible to native Android applications, closing Spotify automatically shuts down audio drivers, display bridges, and background container processes to prevent battery drain:
+To ensure optimal battery life and clean resource management on Android, shutting down Spotify cleanly stops the graphical interface, PulseAudio drivers, and PRoot container processes.
 
-You can close Spotify using any of the following convenient methods:
+> ℹ️ **Note on Android Recent Apps (Swipe / Dismissal)**  
+> On Android, swiping away the Termux-X11 window from the **Recent Apps (App Switcher)** screen **does NOT stop Spotify or pause music playback**.  
+> Termux-X11 runs as a protected foreground service with a persistent system notification: dismissing the app from Recents only closes the visual screen, leaving the background audio process running. This is identical to the official Spotify Android app (which keeps playing in the background if dismissed from Recents).  
+> To completely stop Spotify, shut down audio hardware, and prevent battery drain, use one of the following methods:
 
-1. **Home Screen Widget (Termux:Widget) - One Tap**:
-   Tap the **`Spotify-Stop`** widget shortcut on your Android home screen. It immediately terminates Spotify, closes the Termux-X11 window, stops PulseAudio, releases the Android CPU wake-lock, and restores the terminal state.
+1. **Home Screen Widget (Termux:Widget) - One Tap (Recommended)**:
+   Tap the **`Spotify-Stop`** widget shortcut on your Android home screen. It immediately terminates Spotify, requests Termux-X11 to close, stops PulseAudio, releases the Android CPU wake-lock, and restores the terminal.
 2. **Dedicated Terminal Command**:
    Run anywhere in Termux:
    ```bash
    spotify-stop
    ```
    *(or `spotify --stop`)*
-3. **Android Notification ("Exit")**:
-   When Termux-X11 is running, pull down the Android notification shade and tap **Exit** on the persistent Termux-X11 notification. A background watchdog immediately detects the exit and closes all container Spotify processes and audio hardware bridges.
-4. **Spotify Window Close (GUI)**:
-   Closing Spotify from inside the UI (e.g. window close button or menu exit) automatically triggers a graceful teardown of PulseAudio and Termux-X11.
-5. **Keyboard Interrupt in Termux (`Ctrl+C`)**:
-   Pressing `Ctrl+C` in Termux cleanly intercepts the signal, terminates emulated Spotify processes, releases audio sinks, and restores the terminal prompt (`stty sane`) without freezing or locking up your shell.
+3. **Keyboard Interrupt in Termux (`Ctrl+C`)**:
+   If Spotify was launched from an interactive terminal, pressing `Ctrl+C` in the Termux window cleanly intercepts the signal, terminates container processes, releases audio sinks, and immediately restores the shell prompt (`stty sane`).
 
 ---
 

@@ -114,11 +114,6 @@ cleanup() {
 
     echo -e "\n${YELLOW}[*] Shutting down SpotX Spotify and background services...${CLR}"
 
-    # Terminate watchdog loop if active
-    if [ -n "${WATCHDOG_PID:-}" ]; then
-        kill "$WATCHDOG_PID" 2>/dev/null || true
-    fi
-
     # Terminate container Spotify processes
     pkill -x spotify 2>/dev/null || true
     pkill -f "/usr/share/spotify/spotify" 2>/dev/null || true
@@ -164,24 +159,6 @@ echo -e "${GREEN}${BOLD}[✔] Starting Spotify in Ubuntu container...${CLR}"
 # Filter known PRoot futex warnings that occur when threads are killed
 proot-distro login ubuntu --shared-tmp -- env DISPLAY=:0 PULSE_SERVER=tcp:127.0.0.1:4713 /usr/local/bin/spotify-termux "$@" 2> >(grep -v "The futex facility returned an unexpected error code" >&2) &
 SPOTIFY_PID=$!
-
-# 6. Background watchdog: detect if Termux-X11 was closed from Android (e.g. Exit button on notification)
-(
-    # Allow Spotify and X11 to stabilize initially
-    sleep 5
-    while kill -0 "$SPOTIFY_PID" 2>/dev/null; do
-        # Check if the Termux-X11 Android app (com.termux.x11) is still running.
-        # We don't check the server (termux-x11) because it stays alive even if the app is swiped away.
-        # Using [c] to prevent pgrep from matching its own process.
-        if ! pgrep -f "[c]om\.termux\.x11" >/dev/null 2>&1; then
-            # Display app has been closed or stopped: shut down Spotify
-            kill "$SPOTIFY_PID" 2>/dev/null || true
-            break
-        fi
-        sleep 2
-    done
-) &
-WATCHDOG_PID=$!
 
 # Wait for Spotify process to finish
 wait "$SPOTIFY_PID" 2>/dev/null || true
