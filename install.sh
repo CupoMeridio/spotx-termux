@@ -258,14 +258,25 @@ chmod +x "$UNINSTALL_BIN"
 
 # Termux:Widget shortcut support (pre-creates ~/.shortcuts directory)
 SHORTCUTS_DIR="${HOME}/.shortcuts"
-mkdir -p "$SHORTCUTS_DIR"
+ICONS_DIR="${SHORTCUTS_DIR}/icons"
+mkdir -p "$SHORTCUTS_DIR" "$ICONS_DIR"
+
+# Create Spotify shortcut
 cp "$START_SCRIPT_DEST" "${SHORTCUTS_DIR}/Spotify"
 chmod +x "${SHORTCUTS_DIR}/Spotify"
+
+# Create Spotify-Stop shortcut
 cat << 'WIDGET_STOP' > "${SHORTCUTS_DIR}/Spotify-Stop"
 #!/usr/bin/env bash
 exec "$HOME/start-spotify.sh" --stop
 WIDGET_STOP
 chmod +x "${SHORTCUTS_DIR}/Spotify-Stop"
+
+# Download Spotify icon for Termux:Widget (using a highly reliable initials API as fallback if PNG is needed)
+info "Downloading icons for Termux:Widget..."
+# We use DiceBear to generate a clean "Sp" green icon (128x128 PNG) which is 100% compatible with Termux:Widget
+curl -sSL "https://api.dicebear.com/7.x/initials/png?seed=Sp&backgroundColor=1db954" -o "${ICONS_DIR}/Spotify.png" 2>/dev/null || true
+cp "${ICONS_DIR}/Spotify.png" "${ICONS_DIR}/Spotify-Stop.png" 2>/dev/null || true
 success "Termux:Widget shortcuts created: 'Spotify' and 'Spotify-Stop'"
 
 # 6. Summary and Instructions
