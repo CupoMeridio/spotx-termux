@@ -88,6 +88,7 @@ Usage:
 Options:
   --check, -c       Check for updates without installing (prints installed & latest version)
   --doctor, -d      Run health check and diagnostics tool
+  --force, -f       Force re-download and re-installation of Spotify and SpotX
   --spotx-only, -s  Re-apply SpotX patch only (skips Spotify client update/download)
   --skip-spotx      Update Spotify client only (skips SpotX patching)
   --version, -V     Show version information
@@ -96,6 +97,7 @@ Options:
 Examples:
   spotify-update              Check and update Spotify + apply SpotX patch
   spotify-update --check      Check if an update is available
+  spotify-update --force      Force re-download and clean re-installation
   spotify-update --doctor     Run system diagnostic health check
   spotify-update --spotx-only Re-patch xpui.spa without re-downloading Spotify
 EOF
@@ -104,6 +106,7 @@ EOF
 SPOTX_CHECK_ONLY=0
 SPOTX_ONLY=0
 SPOTX_SKIP=0
+SPOTX_FORCE=0
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -124,6 +127,10 @@ while [[ $# -gt 0 ]]; do
                 error "spotify-doctor not found. Please re-run: bash install.sh"
                 exit 1
             fi
+            ;;
+        --force|-f)
+            SPOTX_FORCE=1
+            shift
             ;;
         --spotx-only|-s)
             SPOTX_ONLY=1
@@ -329,6 +336,7 @@ proot-distro login "$CONTAINER_NAME" --shared-tmp -- \
     env SPOTX_CHECK_ONLY="$SPOTX_CHECK_ONLY" \
         SPOTX_ONLY="$SPOTX_ONLY" \
         SPOTX_SKIP="$SPOTX_SKIP" \
+        SPOTX_FORCE="$SPOTX_FORCE" \
         SPOTX_TERMUX_VERSION="$SPOTX_TERMUX_VERSION" \
         SPOTX_TERMUX_LATEST_VERSION="$SPOTX_TERMUX_LATEST_VERSION" \
         bash /tmp/spotx-guest-setup.sh

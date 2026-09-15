@@ -150,6 +150,10 @@ spotify-update
   ```bash
   spotify-update --check
   ```
+- **Force re-download and clean re-installation** (re-downloads Spotify client, Box64, and reapplies SpotX):
+  ```bash
+  spotify-update --force
+  ```
 - **Reapply SpotX patch only** (useful to refresh SpotX filters without touching the Spotify client):
   ```bash
   spotify-update --spotx-only

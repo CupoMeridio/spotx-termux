@@ -5,6 +5,7 @@
 #   SPOTX_CHECK_ONLY=1  — print version info and exit without changes
 #   SPOTX_ONLY=1        — skip Spotify client update, re-apply SpotX patch only
 #   SPOTX_SKIP=1        — skip SpotX patch application
+#   SPOTX_FORCE=1       — force full re-download and re-installation of Spotify and Box64
 # ==============================================================================
 set -euo pipefail
 
@@ -279,7 +280,12 @@ case "$ARCH" in
                 gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/spotify.gpg
             echo "deb https://repository.spotify.com stable non-free" > /etc/apt/sources.list.d/spotify.list
             apt-get update -y
-            apt-get install -y --no-install-recommends spotify-client
+            if [ "${SPOTX_FORCE:-0}" = "1" ]; then
+                info "Force mode enabled: reinstalling spotify-client..."
+                apt-get install --reinstall -y --no-install-recommends spotify-client
+            else
+                apt-get install -y --no-install-recommends spotify-client
+            fi
             if command -v dpkg-query > /dev/null 2>&1; then
                 mkdir -p "$(dirname "$VERSION_MARKER")"
                 dpkg-query -W -f='${Version}' spotify-client > "$VERSION_MARKER" 2>/dev/null || true
@@ -289,12 +295,16 @@ case "$ARCH" in
 
     aarch64|arm64)
         # ---------------------------------------------------------------
-        # 3a. Box64 — skip if already installed
+        # 3a. Box64 — skip if already installed unless SPOTX_FORCE=1
         # ---------------------------------------------------------------
-        if command -v box64 > /dev/null 2>&1; then
-            success "Box64 already installed: $(box64 --version 2>&1 | head -1 || echo 'unknown version')"
+        if [ "${SPOTX_FORCE:-0}" != "1" ] && command -v box64 > /dev/null 2>&1; then
+            success "Box64 already installed: $(box64 -v 2>&1 | head -1 || echo 'unknown version')"
         else
-            info "Running on ARM64. Configuring Box64 translation layer..."
+            if [ "${SPOTX_FORCE:-0}" = "1" ] && command -v box64 > /dev/null 2>&1; then
+                info "Force mode enabled: reinstalling Box64 translation layer..."
+            else
+                info "Running on ARM64. Configuring Box64 translation layer..."
+            fi
             mkdir -p /etc/apt/trusted.gpg.d /etc/apt/sources.list.d
             # Add Ryan Fortner's box64 repository
             wget -qO- https://ryanfortner.github.io/box64-debs/KEY.gpg | \
@@ -304,12 +314,12 @@ case "$ARCH" in
 
             apt-get update -y
             info "Installing Box64..."
-            apt-get install -y box64-android 2>/dev/null || apt-get install -y box64
-            success "Box64 installed successfully."
+            apt-get install --reinstall -y box64-android 2>/dev/null || apt-get install --reinstall -y box64 2>/dev/null || apt-get install -y box64-android 2>/dev/null || apt-get install -y box64
+            success "Box64 configured successfully."
         fi
 
         # ---------------------------------------------------------------
-        # 3b. Spotify client — skip download if version matches
+        # 3b. Spotify client — skip download if version matches unless SPOTX_FORCE=1
         # ---------------------------------------------------------------
         if [ "${SPOTX_ONLY:-}" = "1" ]; then
             info "SPOTX_ONLY mode: skipping Spotify client update."
@@ -328,10 +338,12 @@ case "$ARCH" in
                 [ -f "$f" ] && [ "$(head -c 4 "$f" 2>/dev/null)" = $'\x7fELF' ]
             }
 
-            if [ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" = "$LATEST_VER" ] && is_valid_elf /usr/share/spotify/spotify; then
+            if [ "${SPOTX_FORCE:-0}" != "1" ] && [ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" = "$LATEST_VER" ] && is_valid_elf /usr/share/spotify/spotify; then
                 success "Spotify ${INSTALLED_VER} is already installed, valid ELF binary, and up-to-date. Skipping download."
             else
-                if [ -n "$INSTALLED_VER" ]; then
+                if [ "${SPOTX_FORCE:-0}" = "1" ]; then
+                    info "Force mode enabled: re-downloading and re-installing Spotify ${LATEST_VER}..."
+                elif [ -n "$INSTALLED_VER" ]; then
                     info "Updating Spotify: ${INSTALLED_VER} → ${LATEST_VER}"
                 else
                     info "Installing Spotify ${LATEST_VER} (fresh install)"
@@ -377,6 +389,9 @@ case "$ARCH" in
                 # Crucial: Debian package extracts /usr/bin/spotify as a symlink to ../share/spotify/spotify.
                 # Remove it now so our Box64 wrapper does not follow the symlink and overwrite /usr/share/spotify/spotify!
                 rm -f /usr/bin/spotify
+
+                # Remove stale xpui backup so SpotX makes a pristine backup of freshly extracted xpui.spa
+                rm -f /usr/share/spotify/Apps/xpui.spa.bak
 
                 # Save installed version marker
                 mkdir -p "$(dirname "$VERSION_MARKER")"

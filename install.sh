@@ -117,11 +117,21 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     echo
     echo "Options:"
     echo "  --doctor, -d             Run system health check & diagnostics"
+    echo "  --force, -f              Force re-download and re-installation of Spotify and SpotX"
     echo "  --uninstall, -u [ARGS]   Launch the uninstaller & cleanup utility"
     echo "  --version, -V            Show version information"
     echo "  --help, -h               Show this help message"
     exit 0
 fi
+
+SPOTX_FORCE=0
+for arg in "$@"; do
+    case "$arg" in
+        --force|-f)
+            SPOTX_FORCE=1
+            ;;
+    esac
+done
 
 # Initialize logging for the installation run
 setup_logging
@@ -341,7 +351,10 @@ fi
 chmod +x "$CONTAINER_SETUP_STAGING"
 
 info "Executing container guest configuration..."
-proot-distro login "$CONTAINER_NAME" --shared-tmp -- bash /tmp/spotx-guest-setup.sh
+proot-distro login "$CONTAINER_NAME" --shared-tmp -- \
+    env SPOTX_FORCE="$SPOTX_FORCE" \
+        SPOTX_TERMUX_VERSION="$SPOTX_TERMUX_VERSION" \
+        bash /tmp/spotx-guest-setup.sh
 rm -f "$CONTAINER_SETUP_STAGING"
 
 # 5. Install launcher scripts on Termux host
