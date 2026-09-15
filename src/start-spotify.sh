@@ -38,6 +38,23 @@ if [ "${1:-}" = "--version" ] || [ "${1:-}" = "-V" ]; then
 fi
 
 # ------------------------------------------------------------------------------
+# Handle --doctor / --status flag
+# ------------------------------------------------------------------------------
+if [ "${1:-}" = "--doctor" ] || [ "${1:-}" = "doctor" ] || [ "${1:-}" = "--status" ] || [ "${1:-}" = "status" ]; then
+    shift
+    if [ -x "${HOME}/doctor-spotify.sh" ]; then
+        exec "$HOME/doctor-spotify.sh" "$@"
+    elif [ -n "${_start_script_dir:-}" ] && [ -f "${_start_script_dir}/doctor.sh" ]; then
+        exec bash "${_start_script_dir}/doctor.sh" "$@"
+    elif command -v spotify-doctor >/dev/null 2>&1; then
+        exec spotify-doctor "$@"
+    else
+        echo -e "${RED}${BOLD}[X] spotify-doctor not found.${CLR} Please run: ${CYAN}bash install.sh${CLR}" >&2
+        exit 1
+    fi
+fi
+
+# ------------------------------------------------------------------------------
 # Handle Stop / Kill invocation (e.g. 'spotify --stop' or 'spotify-stop')
 # ------------------------------------------------------------------------------
 if [ "${1:-}" = "--stop" ] || [ "${1:-}" = "stop" ] || [ "${1:-}" = "-k" ] || [ "${1:-}" = "--kill" ]; then

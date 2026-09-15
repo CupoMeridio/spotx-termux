@@ -43,6 +43,7 @@ Usage:
 
 Options:
   --check, -c       Check for updates without installing (prints installed & latest version)
+  --doctor, -d      Run health check and diagnostics tool
   --spotx-only, -s  Re-apply SpotX patch only (skips Spotify client update/download)
   --skip-spotx      Update Spotify client only (skips SpotX patching)
   --version, -V     Show version information
@@ -51,6 +52,7 @@ Options:
 Examples:
   spotify-update              Check and update Spotify + apply SpotX patch
   spotify-update --check      Check if an update is available
+  spotify-update --doctor     Run system diagnostic health check
   spotify-update --spotx-only Re-patch xpui.spa without re-downloading Spotify
 EOF
 }
@@ -65,6 +67,19 @@ while [[ $# -gt 0 ]]; do
         --check|-c)
             SPOTX_CHECK_ONLY=1
             shift
+            ;;
+        --doctor|-d)
+            shift
+            if [ -x "${HOME}/doctor-spotify.sh" ]; then
+                exec "$HOME/doctor-spotify.sh" "$@"
+            elif [ -n "${SCRIPT_DIR:-}" ] && [ -f "${SCRIPT_DIR}/doctor.sh" ]; then
+                exec bash "${SCRIPT_DIR}/doctor.sh" "$@"
+            elif command -v spotify-doctor >/dev/null 2>&1; then
+                exec spotify-doctor "$@"
+            else
+                error "spotify-doctor not found. Please re-run: bash install.sh"
+                exit 1
+            fi
             ;;
         --spotx-only|-s)
             SPOTX_ONLY=1
@@ -191,6 +206,7 @@ if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
     sync_host_script "start-spotify.sh" "src/start-spotify.sh" "${HOME}/start-spotify.sh"
     sync_host_script "update-spotify.sh" "src/update-spotify.sh" "${HOME}/update-spotify.sh"
     sync_host_script "uninstall.sh" "uninstall.sh" "${HOME}/uninstall-spotify.sh"
+    sync_host_script "doctor.sh" "src/doctor.sh" "${HOME}/doctor-spotify.sh"
 
     # Update version marker file from local repo or GitHub remote
     NEW_SPOTX_VER=""
@@ -209,7 +225,7 @@ if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
         SPOTX_TERMUX_VERSION="$NEW_SPOTX_VER"
     fi
 
-    # Ensure spotify-stop wrapper exists in $BIN_DIR
+    # Ensure spotify-stop and spotify-doctor wrappers exist in $BIN_DIR
     HOST_BIN_DIR="${PREFIX:-/data/data/com.termux/files/usr}/bin"
     mkdir -p "$HOST_BIN_DIR"
     cat << 'STOP_CMD' > "${HOST_BIN_DIR}/spotify-stop"
@@ -217,6 +233,12 @@ if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
 exec "$HOME/start-spotify.sh" --stop "$@"
 STOP_CMD
     chmod +x "${HOST_BIN_DIR}/spotify-stop"
+
+    cat << 'DOCTOR_CMD' > "${HOST_BIN_DIR}/spotify-doctor"
+#!/usr/bin/env bash
+exec "$HOME/doctor-spotify.sh" "$@"
+DOCTOR_CMD
+    chmod +x "${HOST_BIN_DIR}/spotify-doctor"
 
     # Ensure Termux:Widget shortcuts are kept up to date
     SHORTCUTS_DIR="${HOME}/.shortcuts"

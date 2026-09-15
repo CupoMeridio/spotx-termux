@@ -48,6 +48,18 @@ if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "-u" ]; then
     fi
 fi
 
+# Delegate to doctor if requested
+if [ "${1:-}" = "--doctor" ] || [ "${1:-}" = "-d" ] || [ "${1:-}" = "doctor" ]; then
+    shift
+    if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/doctor.sh" ]; then
+        exec bash "${SCRIPT_DIR}/src/doctor.sh" "$@"
+    elif [ -f "${HOME}/doctor-spotify.sh" ]; then
+        exec "$HOME/doctor-spotify.sh" "$@"
+    else
+        exec bash -c "$(curl -fsSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/doctor.sh)" bash "$@"
+    fi
+fi
+
 if [ "${1:-}" = "--version" ] || [ "${1:-}" = "-V" ]; then
     echo "SpotX-Termux ${SPOTX_TERMUX_VERSION}"
     exit 0
@@ -60,6 +72,7 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     echo "  bash install.sh [OPTIONS]"
     echo
     echo "Options:"
+    echo "  --doctor, -d             Run system health check & diagnostics"
     echo "  --uninstall, -u [ARGS]   Launch the uninstaller & cleanup utility"
     echo "  --version, -V            Show version information"
     echo "  --help, -h               Show this help message"
@@ -291,6 +304,27 @@ exec "$HOME/uninstall-spotify.sh" "$@"
 UNINSTALL_CMD
 chmod +x "$UNINSTALL_BIN"
 
+# Install doctor script and wrapper
+DOCTOR_SCRIPT_LOCAL=""
+if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/doctor.sh" ]; then
+    DOCTOR_SCRIPT_LOCAL="${SCRIPT_DIR}/src/doctor.sh"
+fi
+DOCTOR_SCRIPT_DEST="${HOME}/doctor-spotify.sh"
+DOCTOR_BIN="${BIN_DIR}/spotify-doctor"
+
+if [ -n "$DOCTOR_SCRIPT_LOCAL" ] && [ -f "$DOCTOR_SCRIPT_LOCAL" ]; then
+    cp "$DOCTOR_SCRIPT_LOCAL" "$DOCTOR_SCRIPT_DEST"
+else
+    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/doctor.sh?t=$(date +%s)" -o "$DOCTOR_SCRIPT_DEST"
+fi
+chmod +x "$DOCTOR_SCRIPT_DEST"
+
+cat << 'DOCTOR_CMD' > "$DOCTOR_BIN"
+#!/usr/bin/env bash
+exec "$HOME/doctor-spotify.sh" "$@"
+DOCTOR_CMD
+chmod +x "$DOCTOR_BIN"
+
 # Termux:Widget shortcut support (pre-creates ~/.shortcuts directory)
 SHORTCUTS_DIR="${HOME}/.shortcuts"
 ICONS_DIR="${SHORTCUTS_DIR}/icons"
@@ -329,6 +363,7 @@ echo -e "  2. In Termux, simply type:"
 echo -e "     ${BOLD}${GREEN}spotify${CLR}           - Launch Spotify SpotX"
 echo -e "     ${BOLD}${GREEN}spotify-stop${CLR}      - Stop Spotify and all background processes"
 echo -e "     ${BOLD}${GREEN}spotify-update${CLR}    - Update Spotify or re-apply SpotX patch"
+echo -e "     ${BOLD}${GREEN}spotify-doctor${CLR}    - Run health check and diagnostic tool"
 echo -e "     ${BOLD}${GREEN}spotify-uninstall${CLR} - Uninstall or clean up"
 echo -e "  3. Or tap ${BOLD}Spotify${CLR} / ${BOLD}Spotify-Stop${CLR} on your home screen via Termux:Widget."
 echo

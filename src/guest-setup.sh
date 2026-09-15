@@ -57,6 +57,64 @@ read_installed_version() {
 }
 
 # ===========================================================================
+# DOCTOR MODE: print container diagnostics and exit
+# ===========================================================================
+if [ "${SPOTX_DOCTOR:-}" = "1" ] || [ "${1:-}" = "--doctor" ]; then
+    echo -e "${CYAN}=== Ubuntu PRoot Container Diagnostics ===${CLR}"
+    
+    ARCH="$(uname -m)"
+    echo -e "  Container Architecture:    ${BOLD}${ARCH}${CLR}"
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+        if command -v box64 >/dev/null 2>&1; then
+            echo -e "  Box64 Translation:         ${GREEN}${BOLD}$(box64 -v 2>&1 | head -1)${CLR}"
+        else
+            echo -e "  Box64 Translation:         ${RED}${BOLD}missing${CLR}"
+        fi
+        if grep -E "^BOX64_INPROCESSGPU=0" /etc/box64.box64rc /root/.box64rc >/dev/null 2>&1; then
+            echo -e "  Box64 In-Process GPU:      ${GREEN}${BOLD}disabled (0)${CLR}"
+        else
+            echo -e "  Box64 In-Process GPU:      ${YELLOW}${BOLD}not configured${CLR}"
+        fi
+    fi
+
+    if command -v matchbox-window-manager >/dev/null 2>&1; then
+        echo -e "  Window Manager:            ${GREEN}${BOLD}matchbox-window-manager${CLR}"
+    elif command -v openbox >/dev/null 2>&1; then
+        echo -e "  Window Manager:            ${GREEN}${BOLD}openbox${CLR}"
+    else
+        echo -e "  Window Manager:            ${YELLOW}${BOLD}none${CLR}"
+    fi
+
+    if [ -f /usr/share/spotify/spotify ]; then
+        if [ "$(head -c 4 /usr/share/spotify/spotify 2>/dev/null)" = $'\x7fELF' ]; then
+            echo -e "  Spotify Binary:            ${GREEN}${BOLD}valid ELF executable${CLR}"
+        else
+            echo -e "  Spotify Binary:            ${RED}${BOLD}corrupted / invalid ELF${CLR}"
+        fi
+    else
+        echo -e "  Spotify Binary:            ${RED}${BOLD}missing${CLR}"
+    fi
+
+    read_installed_version
+    echo -e "  Installed Version:         ${BOLD}${INSTALLED_VER:-unknown}${CLR}"
+    SPOTX_APPLIED="no"
+    if [ -f /usr/share/spotify/Apps/xpui.spa ]; then
+        if unzip -p /usr/share/spotify/Apps/xpui.spa xpui.js 2>/dev/null | grep -Fq "SpotX"; then
+            SPOTX_APPLIED="yes"
+        fi
+    fi
+    echo -e "  SpotX Patch:               ${BOLD}${SPOTX_APPLIED}${CLR}"
+
+    if [ -x /usr/local/bin/spotify-termux ]; then
+        echo -e "  Container Runner:          ${GREEN}${BOLD}present (/usr/local/bin/spotify-termux)${CLR}"
+    else
+        echo -e "  Container Runner:          ${RED}${BOLD}missing${CLR}"
+    fi
+    echo
+    exit 0
+fi
+
+# ===========================================================================
 # CHECK-ONLY MODE: print versions and exit
 # ===========================================================================
 if [ "${SPOTX_CHECK_ONLY:-}" = "1" ]; then
@@ -72,7 +130,7 @@ if [ "${SPOTX_CHECK_ONLY:-}" = "1" ]; then
     echo -e "  Latest available version:  ${CYAN}${BOLD}${LATEST_VER:-unknown}${CLR}"
 
     if [ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" = "${LATEST_VER:-}" ]; then
-        echo -e "  Status: ${GREEN}${BOLD}up-to-date ✔${CLR}"
+        echo -e "  Status: ${GREEN}${BOLD}up-to-date [OK]${CLR}"
     else
         echo -e "  Status: ${YELLOW}${BOLD}update available${CLR}"
     fi
@@ -87,7 +145,7 @@ if [ "${SPOTX_CHECK_ONLY:-}" = "1" ]; then
     echo -e "  SpotX patch applied:       ${BOLD}${SPOTX_APPLIED}${CLR}"
     if [ -n "${SPOTX_TERMUX_LATEST_VERSION:-}" ] && [ -n "${SPOTX_TERMUX_VERSION:-}" ] && [ "${SPOTX_TERMUX_VERSION}" != "unknown" ]; then
         if [ "${SPOTX_TERMUX_VERSION}" = "${SPOTX_TERMUX_LATEST_VERSION}" ]; then
-            echo -e "  SpotX-Termux scripts:      ${GREEN}${BOLD}${SPOTX_TERMUX_VERSION}${CLR} ✔"
+            echo -e "  SpotX-Termux scripts:      ${GREEN}${BOLD}${SPOTX_TERMUX_VERSION}${CLR} [OK]"
         else
             echo -e "  SpotX-Termux scripts:      ${YELLOW}${BOLD}${SPOTX_TERMUX_VERSION}${CLR} (update available: ${CYAN}${BOLD}${SPOTX_TERMUX_LATEST_VERSION}${CLR})"
         fi

@@ -161,6 +161,25 @@ spotify-update
 
 ---
 
+## Diagnostica & Controllo Integrita (Health Check)
+
+In caso di problemi con l'audio, schermate nere o per verificare lo stato dell'installazione, esegui il tool di diagnostica automatizzato integrato:
+
+```bash
+spotify-doctor
+```
+*(oppure `spotify --doctor`)*
+
+Il comando analizza l'intero sistema attraverso **4 livelli di verifica**:
+1. **Host Termux:** Architettura CPU (ARM64/x86_64), spazio su disco disponibile, pacchetti Termux richiesti (`proot-distro`, `pulseaudio`, `jq`, `curl`) e abilitazione del permesso `allow-external-apps`.
+2. **Integrazione Android & X11:** Pacchetto Termux-X11, presenza dell'APK Android `com.termux.x11` e scorciatoie per Termux:Widget.
+3. **Servizi Runtime:** Configurazione ottimizzata di PulseAudio (speex-float-1, 48kHz), stato del daemon audio e del display server X11.
+4. **Container Ubuntu PRoot:** Reattività del container, layer di traduzione Box64 e JIT, window manager, integrità del binario ELF di Spotify e stato della patch SpotX.
+
+Se viene riscontrato un problema o una configurazione mancante, `spotify-doctor` fornisce **suggerimenti chiari e comandi pronti da copiare/incollare** per risolverli immediatamente.
+
+---
+
 ## 🗑️ Disinstallazione e Pulizia
 
 Se desideri rimuovere o fare pulizia dei componenti di SpotX-Termux, puoi utilizzare l'utility modulare integrata:
@@ -175,7 +194,7 @@ spotify-uninstall
 1. **Disinstallazione Completa (`--full` / `-f`)**:
    - Termina tutti i processi attivi di Spotify, Termux-X11 e PulseAudio.
    - Elimina completamente il container Ubuntu PRoot (**liberando oltre 1 GB di spazio**).
-   - Rimuove tutti i comandi (`spotify`, `spotify-update`, `spotify-uninstall`) e le scorciatoie di Termux:Widget.
+   - Rimuove tutti i comandi (`spotify`, `spotify-stop`, `spotify-update`, `spotify-doctor`, `spotify-uninstall`) e le scorciatoie di Termux:Widget.
    - Chiede facoltativamente se disinstallare anche i pacchetti Termux non più utilizzati (`termux-x11-nightly`, `pulseaudio`).
 2. **Rimuovere solo Spotify & SpotX (`--keep-ubuntu` / `--spotify-only`)**:
    - Disinstalla Spotify, Box64, la mod SpotX e le cartelle di cache/configurazione dentro Ubuntu.
@@ -204,9 +223,11 @@ spotify-uninstall --spotx-only     # Ripristina Spotify stock ufficiale
 spotx-termux/
 ├── install.sh              # Script di installazione principale
 ├── uninstall.sh            # Script modulare di pulizia e disinstallazione
+├── VERSION                 # Versione del progetto (CalVer YYYY.MM.DD)
 ├── README.md               # Documentazione ufficiale (Inglese)
 ├── README.it.md            # Documentazione (Italiano)
 └── src/
+    ├── doctor.sh           # Utility di diagnostica e health-check
     ├── guest-setup.sh      # Script eseguito dentro Ubuntu PRoot (Box64, Spotify, SpotX)
     ├── start-spotify.sh    # Script host per avviare PulseAudio, X11 e Spotify
     └── update-spotify.sh   # Script host per verificare e applicare aggiornamenti
@@ -216,6 +237,8 @@ spotx-termux/
 
 ## 🛠️ Risoluzione Problemi & Consigli
 
+* **Esegui prima la Diagnostica:**  
+  In caso di comportamenti anomali, esegui **`spotify-doctor`** per individuare subito la causa del problema.
 * **Metodo di Login Consigliato (Codice QR):**  
   Al primo accesso a Spotify, **si raccomanda vivamente di utilizzare la procedura con Codice QR**.  
   *Perché:* Il classico pulsante "Accedi" tenta di aprire un browser web desktop di sistema tramite `xdg-open` per completare l'autenticazione OAuth esterna. Poiché all'interno del container minimale PRoot Ubuntu non è presente un browser web grafico, la richiesta fallisce silenziosamente o resta in attesa.

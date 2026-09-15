@@ -161,6 +161,25 @@ spotify-update
 
 ---
 
+## Diagnostics & Health Check
+
+If you encounter audio issues, display problems, or want to verify your setup, run the built-in automated diagnostic tool:
+
+```bash
+spotify-doctor
+```
+*(or `spotify --doctor`)*
+
+The doctor inspects your setup across **4 comprehensive layers**:
+1. **Termux Host:** Architecture (ARM64/x86_64), available disk space, required packages (`proot-distro`, `pulseaudio`, `jq`, `curl`), and `allow-external-apps` permission.
+2. **Android & X11 Companion:** Termux-X11 package, Android APK detection, and Termux:Widget shortcuts.
+3. **Runtime Services:** PulseAudio configuration (speex-float-1, 48kHz), audio daemon status, and X11 display server.
+4. **Ubuntu PRoot Container:** Container responsiveness, Box64 translation layer & JIT configuration, window manager, Spotify ELF binary integrity, and SpotX patch application.
+
+If any issues or misconfigurations are detected, `spotify-doctor` provides **clear, actionable fixes** with the exact commands needed to resolve them.
+
+---
+
 ## 🗑️ Uninstallation & Cleanup
 
 If you want to clean up or uninstall SpotX-Termux, you can use the built-in modular cleanup utility:
@@ -175,7 +194,7 @@ spotify-uninstall
 1. **Full Uninstallation (`--full` / `-f`)**:
    - Stops all running Spotify, Termux-X11, and PulseAudio background processes.
    - Completely removes the PRoot Ubuntu container (**freeing ~1+ GB of storage**).
-   - Deletes all command launchers (`spotify`, `spotify-update`, `spotify-uninstall`) and Termux:Widget shortcuts.
+   - Deletes all command launchers (`spotify`, `spotify-stop`, `spotify-update`, `spotify-doctor`, `spotify-uninstall`) and Termux:Widget shortcuts.
    - Optionally asks if you also want to remove unused Termux packages (`termux-x11-nightly`, `pulseaudio`).
 2. **Remove Spotify & SpotX only (`--keep-ubuntu` / `--spotify-only`)**:
    - Uninstalls Spotify, Box64, SpotX, and user cache/config files inside the container.
@@ -204,9 +223,11 @@ spotify-uninstall --spotx-only     # Revert to official stock Spotify
 spotx-termux/
 ├── install.sh              # Main installation script
 ├── uninstall.sh            # Modular cleanup & uninstallation script
+├── VERSION                 # Project version (CalVer YYYY.MM.DD)
 ├── README.md               # Official documentation (English)
 ├── README.it.md            # Documentation (Italian)
 └── src/
+    ├── doctor.sh           # Diagnostic & health-check utility
     ├── guest-setup.sh      # Container configuration script (Box64, Spotify, SpotX)
     ├── start-spotify.sh    # Host launcher (PulseAudio, X11, Spotify)
     └── update-spotify.sh   # Host updater orchestrator
@@ -216,6 +237,8 @@ spotx-termux/
 
 ## 🛠️ Troubleshooting & Tips
 
+* **Run Health Diagnostics First:**  
+  If anything is not behaving as expected, run **`spotify-doctor`** to pinpoint the exact issue.
 * **Recommended Login Method (QR Code):**  
   When logging into Spotify for the first time, **strongly prefer the QR Code login option**.  
   *Why:* The standard web-based "Log In" button attempts to launch a desktop web browser via `xdg-open` to complete an external OAuth authentication flow. Because the minimal PRoot Ubuntu container does not have a desktop browser installed, clicking that button will fail silently or hang.
