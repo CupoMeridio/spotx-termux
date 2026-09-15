@@ -50,6 +50,18 @@ success() { echo -e "${GREEN}${BOLD}[OK]${CLR} $*"; log_msg "OK" "$*"; }
 warn()    { echo -e "${YELLOW}${BOLD}[! ]${CLR} $*"; log_msg "WARN" "$*"; }
 error()   { echo -e "${RED}${BOLD}[X ]${CLR} $*" >&2; log_msg "ERROR" "$*"; }
 
+notify_user() {
+    local title="$1"
+    local content="$2"
+    if command -v termux-notification >/dev/null 2>&1; then
+        termux-notification \
+            --title "$title" \
+            --content "$content" \
+            --id "spotx-status" \
+            --priority "high" 2>/dev/null || true
+    fi
+}
+
 # Resolve script directory early
 SCRIPT_DIR=""
 if [ -n "${BASH_SOURCE[0]:-}" ]; then
@@ -384,6 +396,9 @@ success "Termux:Widget shortcuts created: 'Spotify' and 'Spotify-Stop'"
 
 # Save SpotX-Termux version marker for runtime version detection
 echo "$SPOTX_TERMUX_VERSION" > "${HOME}/.spotx-termux-version"
+
+# Send system notification on completion if termux-api is available
+notify_user "SpotX-Termux" "Installation completed successfully! Launch Spotify with 'spotify'."
 
 # 6. Summary and Instructions
 echo
