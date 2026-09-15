@@ -162,6 +162,95 @@ if [ "$IS_TERMUX" = false ]; then
     esac
 fi
 
+# Container definitions and storage validation
+CONTAINER_NAME="ubuntu"
+
+is_container_installed() {
+    local name="$1"
+    local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
+    if [ -d "${prefix}/var/lib/proot-distro/containers/${name}" ] || \
+       [ -d "${prefix}/var/lib/proot-distro/installed-rootfs/${name}" ] || \
+       [ -d "/usr/var/lib/proot-distro/containers/${name}" ] || \
+       [ -d "/usr/var/lib/proot-distro/installed-rootfs/${name}" ]; then
+        return 0
+    fi
+    if command -v proot-distro >/dev/null 2>&1; then
+        if proot-distro login "$name" -- true >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+check_disk_space() {
+    info "Checking available storage space..."
+    local target_dir="${HOME}"
+    [ -d "$target_dir" ] || target_dir="/"
+
+    if ! command -v df >/dev/null 2>&1; then
+        warn "Storage check: 'df' command not found, skipping check."
+        return 0
+    fi
+
+    local free_kb=""
+    free_kb=$(df -P -k "$target_dir" 2>/dev/null | awk 'NR==2 {print $4}' || true)
+    if [ -z "$free_kb" ] || ! [ "$free_kb" -gt 0 ] 2>/dev/null; then
+        free_kb=$(df -k "$target_dir" 2>/dev/null | awk 'NR==2 {print $4}' || true)
+    fi
+
+    if [ -n "$free_kb" ] && [ "$free_kb" -gt 0 ] 2>/dev/null; then
+        local free_mb=$((free_kb / 1024))
+        local free_gb=$((free_mb / 1024))
+
+        if is_container_installed "$CONTAINER_NAME"; then
+            info "Container '${CONTAINER_NAME}' already exists. Reusing allocated storage."
+            if [ "$free_mb" -lt 300 ]; then
+                error "Critically low storage space: only ${free_mb} MB available."
+                error "Please free up storage space before running the installer."
+                exit 1
+            else
+                success "Storage check passed: ${free_mb} MB free."
+            fi
+            return 0
+        fi
+
+        if [ "$free_mb" -ge 2048 ]; then
+            success "Storage check passed: ${free_gb} GB free (${free_mb} MB available)."
+        elif [ "$free_mb" -ge 1024 ]; then
+            warn "Low storage space: only ${free_mb} MB free."
+            warn "SpotX-Termux installation requires ~1.2 GB of temporary extraction space."
+            warn "Audio and Spotify cache will require additional storage."
+            local resp=""
+            if [ -t 0 ]; then
+                read -rp "Do you want to proceed anyway? [y/N]: " resp
+            elif [ -e /dev/tty ]; then
+                read -rp "Do you want to proceed anyway? [y/N]: " resp < /dev/tty
+            else
+                resp="y"
+            fi
+            case "$resp" in
+                [yY]|[yY][eE][sS])
+                    info "Proceeding with installation despite low storage warning..."
+                    ;;
+                *)
+                    info "Installation aborted by user to free up storage space."
+                    exit 0
+                    ;;
+            esac
+        else
+            error "Insufficient storage space: only ${free_mb} MB free!"
+            error "SpotX-Termux requires at least 1024 MB (1 GB) to unpack Ubuntu, Box64, and Spotify."
+            error "Please free up storage space on your device and run the installer again."
+            exit 1
+        fi
+    else
+        warn "Storage check: unable to calculate available space. Continuing..."
+    fi
+}
+
+check_disk_space
+
+
 # 2. Update Termux repositories and install host dependencies
 if [ "$IS_TERMUX" = true ]; then
     info "Enabling Termux X11 repository..."
@@ -208,25 +297,6 @@ PULSE_CONF
 fi
 
 # 3. Setup Ubuntu container via proot-distro
-CONTAINER_NAME="ubuntu"
-
-is_container_installed() {
-    local name="$1"
-    local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
-    if [ -d "${prefix}/var/lib/proot-distro/containers/${name}" ] || \
-       [ -d "${prefix}/var/lib/proot-distro/installed-rootfs/${name}" ] || \
-       [ -d "/usr/var/lib/proot-distro/containers/${name}" ] || \
-       [ -d "/usr/var/lib/proot-distro/installed-rootfs/${name}" ]; then
-        return 0
-    fi
-    if command -v proot-distro >/dev/null 2>&1; then
-        if proot-distro login "$name" -- true >/dev/null 2>&1; then
-            return 0
-        fi
-    fi
-    return 1
-}
-
 info "Checking PRoot container '${CONTAINER_NAME}'..."
 if is_container_installed "$CONTAINER_NAME"; then
     success "Container '${CONTAINER_NAME}' already installed."
