@@ -5,6 +5,20 @@
 # ==============================================================================
 set -euo pipefail
 
+# Resolve SpotX-Termux project version (CalVer: YYYY.MM.DD)
+SPOTX_TERMUX_VERSION=""
+_uninstall_script_dir=""
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+    _uninstall_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+fi
+if [ -n "$_uninstall_script_dir" ] && [ -f "${_uninstall_script_dir}/VERSION" ]; then
+    SPOTX_TERMUX_VERSION=$(cat "${_uninstall_script_dir}/VERSION" 2>/dev/null | tr -d '[:space:]')
+fi
+if [ -z "$SPOTX_TERMUX_VERSION" ] && [ -f "${HOME}/.spotx-termux-version" ]; then
+    SPOTX_TERMUX_VERSION=$(cat "${HOME}/.spotx-termux-version" 2>/dev/null | tr -d '[:space:]')
+fi
+: "${SPOTX_TERMUX_VERSION:=unknown}"
+
 # ANSI color codes
 CLR='\033[0m'
 BOLD='\033[1m'
@@ -40,12 +54,13 @@ show_banner() {
     echo "       |_|                                                          "
     echo -e "${CLR}"
     echo -e "${CYAN}SpotX-Termux - Modular Uninstaller & Cleanup Utility${CLR}"
+    echo -e "${CYAN}Version: ${SPOTX_TERMUX_VERSION}${CLR}"
     echo -e "${CYAN}----------------------------------------------------${CLR}\n"
 }
 
 show_help() {
     cat << EOF
-SpotX-Termux Uninstaller & Cleanup Tool
+SpotX-Termux Uninstaller & Cleanup Tool (v${SPOTX_TERMUX_VERSION})
 
 Usage:
   spotify-uninstall [OPTIONS]
@@ -60,6 +75,7 @@ Options:
   -l, --launchers-only  Remove only Termux launchers and shortcuts
   -p, --purge-pkgs      Also uninstall Termux companion packages (termux-x11, pulseaudio) during full removal
   -y, --yes             Automatic yes to confirmation prompts (non-interactive)
+  -V, --version         Show version information
   -h, --help            Show this help message
 
 Interactive Mode:
@@ -174,6 +190,7 @@ remove_launchers() {
         "${HOME}/start-spotify.sh"
         "${HOME}/update-spotify.sh"
         "${HOME}/uninstall-spotify.sh"
+        "${HOME}/.spotx-termux-version"
         "${SHORTCUTS_DIR}/Spotify"
         "${SHORTCUTS_DIR}/Spotify-Stop"
     )
@@ -418,6 +435,10 @@ while [[ $# -gt 0 ]]; do
         -y|--yes)
             AUTO_YES=1
             shift
+            ;;
+        -V|--version)
+            echo "SpotX-Termux ${SPOTX_TERMUX_VERSION}"
+            exit 0
             ;;
         -h|--help)
             show_help

@@ -85,6 +85,15 @@ if [ "${SPOTX_CHECK_ONLY:-}" = "1" ]; then
         fi
     fi
     echo -e "  SpotX patch applied:       ${BOLD}${SPOTX_APPLIED}${CLR}"
+    if [ -n "${SPOTX_TERMUX_LATEST_VERSION:-}" ] && [ -n "${SPOTX_TERMUX_VERSION:-}" ] && [ "${SPOTX_TERMUX_VERSION}" != "unknown" ]; then
+        if [ "${SPOTX_TERMUX_VERSION}" = "${SPOTX_TERMUX_LATEST_VERSION}" ]; then
+            echo -e "  SpotX-Termux scripts:      ${GREEN}${BOLD}${SPOTX_TERMUX_VERSION}${CLR} ✔"
+        else
+            echo -e "  SpotX-Termux scripts:      ${YELLOW}${BOLD}${SPOTX_TERMUX_VERSION}${CLR} (update available: ${CYAN}${BOLD}${SPOTX_TERMUX_LATEST_VERSION}${CLR})"
+        fi
+    else
+        echo -e "  SpotX-Termux scripts:      ${BOLD}${SPOTX_TERMUX_VERSION:-unknown}${CLR}"
+    fi
     echo
     exit 0
 fi

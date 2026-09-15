@@ -2,5 +2,6 @@
 # Set default behavior, in case users don't have core.autocrlf set.
 * text=auto
 
-# Ensure shell scripts always use LF line endings
+# Ensure shell scripts and version files always use LF line endings
 *.sh text eol=lf
+VERSION text eol=lf

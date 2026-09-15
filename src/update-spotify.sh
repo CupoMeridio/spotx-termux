@@ -5,6 +5,22 @@
 # ==============================================================================
 set -euo pipefail
 
+# Resolve SpotX-Termux project version (CalVer: YYYY.MM.DD)
+SPOTX_TERMUX_VERSION=""
+SCRIPT_DIR=""
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+fi
+if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/../VERSION" ]; then
+    SPOTX_TERMUX_VERSION=$(cat "${SCRIPT_DIR}/../VERSION" 2>/dev/null | tr -d '[:space:]')
+elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/VERSION" ]; then
+    SPOTX_TERMUX_VERSION=$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null | tr -d '[:space:]')
+fi
+if [ -z "$SPOTX_TERMUX_VERSION" ] && [ -f "${HOME}/.spotx-termux-version" ]; then
+    SPOTX_TERMUX_VERSION=$(cat "${HOME}/.spotx-termux-version" 2>/dev/null | tr -d '[:space:]')
+fi
+: "${SPOTX_TERMUX_VERSION:=unknown}"
+
 # ANSI color codes
 CLR='\033[0m'
 BOLD='\033[1m'
@@ -20,7 +36,7 @@ error()   { echo -e "${RED}${BOLD}[✘]${CLR} $*" >&2; }
 
 show_help() {
     cat << EOF
-SpotX-Termux Updater
+SpotX-Termux Updater (v${SPOTX_TERMUX_VERSION})
 
 Usage:
   spotify-update [OPTIONS]
@@ -29,6 +45,7 @@ Options:
   --check, -c       Check for updates without installing (prints installed & latest version)
   --spotx-only, -s  Re-apply SpotX patch only (skips Spotify client update/download)
   --skip-spotx      Update Spotify client only (skips SpotX patching)
+  --version, -V     Show version information
   --help, -h        Show this help message
 
 Examples:
@@ -61,6 +78,10 @@ while [[ $# -gt 0 ]]; do
             show_help
             exit 0
             ;;
+        --version|-V)
+            echo "SpotX-Termux ${SPOTX_TERMUX_VERSION}"
+            exit 0
+            ;;
         *)
             error "Unknown argument: $1"
             show_help
@@ -71,6 +92,7 @@ done
 
 echo -e "${CYAN}======================================================${CLR}"
 echo -e "${CYAN}${BOLD}   SpotX Termux - Updater Orchestrator               ${CLR}"
+echo -e "${CYAN}   Version: ${SPOTX_TERMUX_VERSION}                              ${CLR}"
 echo -e "${CYAN}======================================================${CLR}"
 
 CONTAINER_NAME="ubuntu"
@@ -105,10 +127,6 @@ if ! is_container_installed "$CONTAINER_NAME"; then
 fi
 
 # Stage guest-setup.sh
-SCRIPT_DIR=""
-if [ -n "${BASH_SOURCE[0]:-}" ]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
-fi
 
 GUEST_SETUP_LOCAL=""
 if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/guest-setup.sh" ]; then
@@ -174,6 +192,23 @@ if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
     sync_host_script "update-spotify.sh" "src/update-spotify.sh" "${HOME}/update-spotify.sh"
     sync_host_script "uninstall.sh" "uninstall.sh" "${HOME}/uninstall-spotify.sh"
 
+    # Update version marker file from local repo or GitHub remote
+    NEW_SPOTX_VER=""
+    if [ "$SCRIPT_DIR" != "$HOME" ] && [ -n "$SCRIPT_DIR" ]; then
+        if [ -f "${SCRIPT_DIR}/../VERSION" ]; then
+            NEW_SPOTX_VER=$(cat "${SCRIPT_DIR}/../VERSION" 2>/dev/null | tr -d '[:space:]')
+        elif [ -f "${SCRIPT_DIR}/VERSION" ]; then
+            NEW_SPOTX_VER=$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null | tr -d '[:space:]')
+        fi
+    fi
+    if [ -z "$NEW_SPOTX_VER" ]; then
+        NEW_SPOTX_VER=$(curl -sSL --connect-timeout 3 --max-time 5 "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/VERSION?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
+    fi
+    if [ -n "$NEW_SPOTX_VER" ]; then
+        echo "$NEW_SPOTX_VER" > "${HOME}/.spotx-termux-version"
+        SPOTX_TERMUX_VERSION="$NEW_SPOTX_VER"
+    fi
+
     # Ensure spotify-stop wrapper exists in $BIN_DIR
     HOST_BIN_DIR="${PREFIX:-/data/data/com.termux/files/usr}/bin"
     mkdir -p "$HOST_BIN_DIR"
@@ -204,12 +239,29 @@ WIDGET_STOP
     rm -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/pulse-socket" 2>/dev/null || true
 fi
 
+# In check mode, query the latest available SpotX-Termux script version
+SPOTX_TERMUX_LATEST_VERSION=""
+if [ "$SPOTX_CHECK_ONLY" = "1" ]; then
+    if [ "$SCRIPT_DIR" != "$HOME" ] && [ -n "$SCRIPT_DIR" ]; then
+        if [ -f "${SCRIPT_DIR}/../VERSION" ]; then
+            SPOTX_TERMUX_LATEST_VERSION=$(cat "${SCRIPT_DIR}/../VERSION" 2>/dev/null | tr -d '[:space:]')
+        elif [ -f "${SCRIPT_DIR}/VERSION" ]; then
+            SPOTX_TERMUX_LATEST_VERSION=$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null | tr -d '[:space:]')
+        fi
+    fi
+    if [ -z "$SPOTX_TERMUX_LATEST_VERSION" ]; then
+        SPOTX_TERMUX_LATEST_VERSION=$(curl -sSL --connect-timeout 3 --max-time 5 "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/VERSION?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
+    fi
+fi
+
 # Run inside PRoot container with appropriate flags
 info "Running update inside container '${CONTAINER_NAME}'..."
 proot-distro login "$CONTAINER_NAME" --shared-tmp -- \
     env SPOTX_CHECK_ONLY="$SPOTX_CHECK_ONLY" \
         SPOTX_ONLY="$SPOTX_ONLY" \
         SPOTX_SKIP="$SPOTX_SKIP" \
+        SPOTX_TERMUX_VERSION="$SPOTX_TERMUX_VERSION" \
+        SPOTX_TERMUX_LATEST_VERSION="$SPOTX_TERMUX_LATEST_VERSION" \
         bash /tmp/spotx-guest-setup.sh
 
 if [ "$SPOTX_CHECK_ONLY" = "0" ]; then

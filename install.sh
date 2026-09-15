@@ -24,6 +24,20 @@ if [ -n "${BASH_SOURCE[0]:-}" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
 fi
 
+# Resolve SpotX-Termux project version (CalVer: YYYY.MM.DD)
+# Priority: local repo VERSION file → GitHub remote → installed marker → "unknown"
+SPOTX_TERMUX_VERSION=""
+if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/VERSION" ]; then
+    SPOTX_TERMUX_VERSION=$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null | tr -d '[:space:]')
+fi
+if [ -z "$SPOTX_TERMUX_VERSION" ]; then
+    SPOTX_TERMUX_VERSION=$(curl -sSL --connect-timeout 3 --max-time 5 "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/VERSION?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
+fi
+if [ -z "$SPOTX_TERMUX_VERSION" ] && [ -f "${HOME}/.spotx-termux-version" ]; then
+    SPOTX_TERMUX_VERSION=$(cat "${HOME}/.spotx-termux-version" 2>/dev/null | tr -d '[:space:]')
+fi
+: "${SPOTX_TERMUX_VERSION:=unknown}"
+
 # Delegate to uninstaller if requested
 if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "-u" ]; then
     shift
@@ -34,14 +48,20 @@ if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "-u" ]; then
     fi
 fi
 
+if [ "${1:-}" = "--version" ] || [ "${1:-}" = "-V" ]; then
+    echo "SpotX-Termux ${SPOTX_TERMUX_VERSION}"
+    exit 0
+fi
+
 if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-    echo "SpotX-Termux Installer"
+    echo "SpotX-Termux Installer (v${SPOTX_TERMUX_VERSION})"
     echo
     echo "Usage:"
     echo "  bash install.sh [OPTIONS]"
     echo
     echo "Options:"
     echo "  --uninstall, -u [ARGS]   Launch the uninstaller & cleanup utility"
+    echo "  --version, -V            Show version information"
     echo "  --help, -h               Show this help message"
     exit 0
 fi
@@ -55,6 +75,7 @@ echo " |____/| .__/ \___/ \__/_/\_\   |_|\___|_|  |_| |_| |_|\__,_/_/\_\ "
 echo "       |_|                                                         "
 echo -e "${CLR}"
 echo -e "${CYAN}Automatic setup of Spotify Desktop + SpotX inside Termux PRoot${CLR}"
+echo -e "${CYAN}Version: ${BOLD}${SPOTX_TERMUX_VERSION}${CLR}"
 echo -e "${CYAN}---------------------------------------------------------------${CLR}\n"
 
 # 1. Environment check
@@ -292,6 +313,9 @@ curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/s
 cp "${ICONS_DIR}/Spotify.png" "${ICONS_DIR}/Spotify-Stop.png" 2>/dev/null || true
 success "Termux:Widget shortcuts created: 'Spotify' and 'Spotify-Stop'"
 
+# Save SpotX-Termux version marker for runtime version detection
+echo "$SPOTX_TERMUX_VERSION" > "${HOME}/.spotx-termux-version"
+
 # 6. Summary and Instructions
 echo
 echo -e "${GREEN}${BOLD}======================================================${CLR}"
@@ -302,10 +326,10 @@ echo -e "${CYAN}How to manage Spotify SpotX:${CLR}"
 echo -e "  1. Make sure you have installed the ${BOLD}Termux-X11 APK${CLR} on your Android device."
 echo -e "     (Download: https://github.com/termux/termux-x11/releases)"
 echo -e "  2. In Termux, simply type:"
-echo -e "     ${BOLD}${GREEN}spotify${CLR}           - Avvia Spotify SpotX"
-echo -e "     ${BOLD}${GREEN}spotify-stop${CLR}      - Chiude Spotify e tutti i processi in background"
-echo -e "     ${BOLD}${GREEN}spotify-update${CLR}    - Aggiorna Spotify o ri-applica la patch SpotX"
-echo -e "     ${BOLD}${GREEN}spotify-uninstall${CLR} - Disinstalla o esegui la pulizia"
+echo -e "     ${BOLD}${GREEN}spotify${CLR}           - Launch Spotify SpotX"
+echo -e "     ${BOLD}${GREEN}spotify-stop${CLR}      - Stop Spotify and all background processes"
+echo -e "     ${BOLD}${GREEN}spotify-update${CLR}    - Update Spotify or re-apply SpotX patch"
+echo -e "     ${BOLD}${GREEN}spotify-uninstall${CLR} - Uninstall or clean up"
 echo -e "  3. Or tap ${BOLD}Spotify${CLR} / ${BOLD}Spotify-Stop${CLR} on your home screen via Termux:Widget."
 echo
 echo -e "${YELLOW}Tips for the best experience:${CLR}"

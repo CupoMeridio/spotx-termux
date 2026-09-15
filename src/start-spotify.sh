@@ -4,6 +4,21 @@
 # ==============================================================================
 set -e
 
+# Resolve SpotX-Termux project version (CalVer: YYYY.MM.DD)
+SPOTX_TERMUX_VERSION=""
+if [ -f "${HOME}/.spotx-termux-version" ]; then
+    SPOTX_TERMUX_VERSION=$(cat "${HOME}/.spotx-termux-version" 2>/dev/null | tr -d '[:space:]')
+fi
+if [ -z "$SPOTX_TERMUX_VERSION" ] && [ -n "${BASH_SOURCE[0]:-}" ]; then
+    _start_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+    if [ -f "${_start_script_dir}/../VERSION" ]; then
+        SPOTX_TERMUX_VERSION=$(cat "${_start_script_dir}/../VERSION" 2>/dev/null | tr -d '[:space:]')
+    elif [ -f "${_start_script_dir}/VERSION" ]; then
+        SPOTX_TERMUX_VERSION=$(cat "${_start_script_dir}/VERSION" 2>/dev/null | tr -d '[:space:]')
+    fi
+fi
+: "${SPOTX_TERMUX_VERSION:=unknown}"
+
 # ANSI colors
 CLR='\033[0m'
 BOLD='\033[1m'
@@ -13,6 +28,14 @@ YELLOW='\033[0;33m'
 RED='\033[0;31m'
 
 TERMUX_TMP="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
+
+# ------------------------------------------------------------------------------
+# Handle --version flag
+# ------------------------------------------------------------------------------
+if [ "${1:-}" = "--version" ] || [ "${1:-}" = "-V" ]; then
+    echo "SpotX-Termux ${SPOTX_TERMUX_VERSION}"
+    exit 0
+fi
 
 # ------------------------------------------------------------------------------
 # Handle Stop / Kill invocation (e.g. 'spotify --stop' or 'spotify-stop')
