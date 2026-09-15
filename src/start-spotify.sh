@@ -90,7 +90,7 @@ if [ "${1:-}" = "--stop" ] || [ "${1:-}" = "stop" ] || [ "${1:-}" = "-k" ] || [ 
     # Restore terminal mode
     stty sane 2>/dev/null || true
 
-    echo -e "${GREEN}${BOLD}[✔] SpotX Spotify stopped successfully.${CLR}"
+    echo -e "${GREEN}${BOLD}[OK] SpotX Spotify stopped successfully.${CLR}"
     exit 0
 fi
 
@@ -98,7 +98,7 @@ fi
 # Check prerequisites
 # ------------------------------------------------------------------------------
 if ! command -v proot-distro > /dev/null 2>&1; then
-    echo -e "${RED}${BOLD}[✘] Error: proot-distro is not installed!${CLR}"
+    echo -e "${RED}${BOLD}[X ] Error: proot-distro is not installed!${CLR}"
     echo -e "${YELLOW}Please run the installer first: bash install.sh${CLR}"
     exit 1
 fi
@@ -218,7 +218,7 @@ cleanup() {
     # Restore terminal mode
     stty sane 2>/dev/null || true
 
-    echo -e "${GREEN}${BOLD}[✔] SpotX Spotify closed cleanly.${CLR}"
+    echo -e "${GREEN}${BOLD}[OK] SpotX Spotify closed cleanly.${CLR}"
     exit 0
 }
 
@@ -226,7 +226,7 @@ cleanup() {
 trap cleanup EXIT INT TERM HUP
 
 # 5. Execute Spotify inside PRoot Ubuntu container in background
-echo -e "${GREEN}${BOLD}[✔] Starting Spotify in Ubuntu container...${CLR}"
+echo -e "${GREEN}${BOLD}[OK] Starting Spotify in Ubuntu container...${CLR}"
 # Filter known PRoot futex warnings that occur when threads are killed
 proot-distro login ubuntu --shared-tmp -- env DISPLAY=:0 PULSE_SERVER=tcp:127.0.0.1:4713 /usr/local/bin/spotify-termux "$@" 2> >(grep -v "The futex facility returned an unexpected error code" >&2) &
 SPOTIFY_PID=$!

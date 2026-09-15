@@ -29,10 +29,42 @@ CYAN='\033[0;36m'
 YELLOW='\033[0;33m'
 RED='\033[0;31m'
 
-info()    { echo -e "${CYAN}${BOLD}[*]${CLR} $*"; }
-success() { echo -e "${GREEN}${BOLD}[✔]${CLR} $*"; }
-warn()    { echo -e "${YELLOW}${BOLD}[!]${CLR} $*"; }
-error()   { echo -e "${RED}${BOLD}[✘]${CLR} $*" >&2; }
+# Logging configuration (~/.spotx-termux/logs/update.log with .old rotation)
+LOG_DIR="${HOME}/.spotx-termux/logs"
+LOG_FILE="${LOG_DIR}/update.log"
+
+setup_logging() {
+    mkdir -p "$LOG_DIR" 2>/dev/null || true
+    if [ -f "$LOG_FILE" ]; then
+        mv -f "$LOG_FILE" "${LOG_FILE}.old" 2>/dev/null || true
+    fi
+    {
+        echo "============================================================"
+        echo "SpotX-Termux Updater Log: $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || true)"
+        echo "Version: ${SPOTX_TERMUX_VERSION:-unknown}"
+        echo "Architecture: $(uname -m 2>/dev/null || echo 'unknown')"
+        echo "Prefix: ${PREFIX:-/data/data/com.termux/files/usr}"
+        echo "============================================================"
+    } > "$LOG_FILE" 2>/dev/null || true
+}
+
+log_msg() {
+    local level="$1"
+    shift
+    local msg="$*"
+    if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
+        local clean_msg
+        clean_msg=$(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' <<< "$msg" 2>/dev/null || echo "$msg")
+        local timestamp
+        timestamp=$(date "+%Y-%m-%d %H:%M:%S" 2>/dev/null || true)
+        echo "[$timestamp] [$level] $clean_msg" >> "$LOG_FILE" 2>/dev/null || true
+    fi
+}
+
+info()    { echo -e "${CYAN}${BOLD}[*]${CLR} $*"; log_msg "INFO" "$*"; }
+success() { echo -e "${GREEN}${BOLD}[OK]${CLR} $*"; log_msg "OK" "$*"; }
+warn()    { echo -e "${YELLOW}${BOLD}[! ]${CLR} $*"; log_msg "WARN" "$*"; }
+error()   { echo -e "${RED}${BOLD}[X ]${CLR} $*" >&2; log_msg "ERROR" "$*"; }
 
 show_help() {
     cat << EOF
@@ -104,6 +136,9 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Initialize logging for the update run
+setup_logging
 
 echo -e "${CYAN}======================================================${CLR}"
 echo -e "${CYAN}${BOLD}   SpotX Termux - Updater Orchestrator               ${CLR}"
@@ -287,5 +322,8 @@ proot-distro login "$CONTAINER_NAME" --shared-tmp -- \
         bash /tmp/spotx-guest-setup.sh
 
 if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
-    success "Update process finished!"
+    success "Update process finished! Log saved to ${LOG_FILE}"
+else
+    info "Check completed. Log saved to ${LOG_FILE}"
 fi
+

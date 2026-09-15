@@ -13,10 +13,42 @@ CYAN='\033[0;36m'
 YELLOW='\033[0;33m'
 RED='\033[0;31m'
 
-info()    { echo -e "${CYAN}${BOLD}[*]${CLR} $*"; }
-success() { echo -e "${GREEN}${BOLD}[✔]${CLR} $*"; }
-warn()    { echo -e "${YELLOW}${BOLD}[!]${CLR} $*"; }
-error()   { echo -e "${RED}${BOLD}[✘]${CLR} $*" >&2; }
+# Logging configuration (~/.spotx-termux/logs/install.log with .old rotation)
+LOG_DIR="${HOME}/.spotx-termux/logs"
+LOG_FILE="${LOG_DIR}/install.log"
+
+setup_logging() {
+    mkdir -p "$LOG_DIR" 2>/dev/null || true
+    if [ -f "$LOG_FILE" ]; then
+        mv -f "$LOG_FILE" "${LOG_FILE}.old" 2>/dev/null || true
+    fi
+    {
+        echo "============================================================"
+        echo "SpotX-Termux Installer Log: $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || true)"
+        echo "Version: ${SPOTX_TERMUX_VERSION:-unknown}"
+        echo "Architecture: $(uname -m 2>/dev/null || echo 'unknown')"
+        echo "Prefix: ${PREFIX:-/data/data/com.termux/files/usr}"
+        echo "============================================================"
+    } > "$LOG_FILE" 2>/dev/null || true
+}
+
+log_msg() {
+    local level="$1"
+    shift
+    local msg="$*"
+    if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
+        local clean_msg
+        clean_msg=$(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' <<< "$msg" 2>/dev/null || echo "$msg")
+        local timestamp
+        timestamp=$(date "+%Y-%m-%d %H:%M:%S" 2>/dev/null || true)
+        echo "[$timestamp] [$level] $clean_msg" >> "$LOG_FILE" 2>/dev/null || true
+    fi
+}
+
+info()    { echo -e "${CYAN}${BOLD}[*]${CLR} $*"; log_msg "INFO" "$*"; }
+success() { echo -e "${GREEN}${BOLD}[OK]${CLR} $*"; log_msg "OK" "$*"; }
+warn()    { echo -e "${YELLOW}${BOLD}[! ]${CLR} $*"; log_msg "WARN" "$*"; }
+error()   { echo -e "${RED}${BOLD}[X ]${CLR} $*" >&2; log_msg "ERROR" "$*"; }
 
 # Resolve script directory early
 SCRIPT_DIR=""
@@ -78,6 +110,9 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     echo "  --help, -h               Show this help message"
     exit 0
 fi
+
+# Initialize logging for the installation run
+setup_logging
 
 echo -e "${GREEN}${BOLD}"
 echo "  ____             _  __  __   _____                                "
@@ -370,4 +405,5 @@ echo
 echo -e "${YELLOW}Tips for the best experience:${CLR}"
 echo -e "  * Disable Android battery optimization for Termux so audio playback is not paused."
 echo -e "  * In Termux-X11 preferences, enable fullscreen and Touchpad mouse mode."
+echo -e "  * Installation log available at: ${BOLD}${CYAN}${LOG_FILE}${CLR}"
 echo

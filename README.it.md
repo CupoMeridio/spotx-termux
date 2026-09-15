@@ -235,8 +235,17 @@ spotx-termux/
 
 ---
 
-## 🛠️ Risoluzione Problemi & Consigli
+## Risoluzione Problemi & Consigli
 
+* **File di Log e Diagnostica:**  
+  Tutte le operazioni registrano i log di diagnostica in `~/.spotx-termux/logs/`:
+  - `install.log` (sessione precedente conservata come `install.log.old`)
+  - `update.log` (sessione precedente conservata come `update.log.old`)
+  - `uninstall.log` (sessione precedente conservata come `uninstall.log.old`)  
+  Per consultare il log dell'ultima installazione:
+  ```bash
+  cat ~/.spotx-termux/logs/install.log
+  ```
 * **Esegui prima la Diagnostica:**  
   In caso di comportamenti anomali, esegui **`spotify-doctor`** per individuare subito la causa del problema.
 * **Metodo di Login Consigliato (Codice QR):**  

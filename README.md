@@ -235,8 +235,17 @@ spotx-termux/
 
 ---
 
-## 🛠️ Troubleshooting & Tips
+## Troubleshooting & Tips
 
+* **Log Files & Diagnostics:**  
+  All operations write diagnostic logs to `~/.spotx-termux/logs/`:
+  - `install.log` (previous run saved as `install.log.old`)
+  - `update.log` (previous run saved as `update.log.old`)
+  - `uninstall.log` (previous run saved as `uninstall.log.old`)  
+  To view the latest installation log:
+  ```bash
+  cat ~/.spotx-termux/logs/install.log
+  ```
 * **Run Health Diagnostics First:**  
   If anything is not behaving as expected, run **`spotify-doctor`** to pinpoint the exact issue.
 * **Recommended Login Method (QR Code):**  

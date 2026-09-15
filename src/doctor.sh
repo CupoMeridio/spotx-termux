@@ -221,6 +221,23 @@ else
     record_warn "Missing Command Wrappers" "Re-run 'bash install.sh' to restore wrapper scripts in ${BIN_DIR}."
 fi
 
+# Check 1.7: SpotX-Termux Log Directory & Diagnostic Logs
+LOG_DIR="${HOME}/.spotx-termux/logs"
+if [ -d "$LOG_DIR" ]; then
+    FOUND_LOGS=()
+    [ -f "${LOG_DIR}/install.log" ] && FOUND_LOGS+=("install.log")
+    [ -f "${LOG_DIR}/update.log" ] && FOUND_LOGS+=("update.log")
+    [ -f "${LOG_DIR}/uninstall.log" ] && FOUND_LOGS+=("uninstall.log")
+    if [ ${#FOUND_LOGS[@]} -gt 0 ]; then
+        echo -e "  ${SYM_PASS} Diagnostics & Logs:        ${GREEN}${LOG_DIR}${CLR} ${DIM}(${FOUND_LOGS[*]})${CLR}"
+        record_pass
+    else
+        echo -e "  ${SYM_INFO} Diagnostics & Logs:        ${LOG_DIR} ${DIM}(ready, no logs yet)${CLR}"
+    fi
+else
+    echo -e "  ${SYM_INFO} Diagnostics & Logs:        not initialized ${DIM}(created on first run)${CLR}"
+fi
+
 echo
 
 # ==============================================================================

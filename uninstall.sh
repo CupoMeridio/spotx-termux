@@ -28,10 +28,42 @@ YELLOW='\033[0;33m'
 RED='\033[0;31m'
 WHITE='\033[1;37m'
 
-info()    { echo -e "${CYAN}${BOLD}[*]${CLR} $*"; }
-success() { echo -e "${GREEN}${BOLD}[✔]${CLR} $*"; }
-warn()    { echo -e "${YELLOW}${BOLD}[!]${CLR} $*"; }
-error()   { echo -e "${RED}${BOLD}[✘]${CLR} $*" >&2; }
+# Logging configuration (~/.spotx-termux/logs/uninstall.log with .old rotation)
+LOG_DIR="${HOME}/.spotx-termux/logs"
+LOG_FILE="${LOG_DIR}/uninstall.log"
+
+setup_logging() {
+    mkdir -p "$LOG_DIR" 2>/dev/null || true
+    if [ -f "$LOG_FILE" ]; then
+        mv -f "$LOG_FILE" "${LOG_FILE}.old" 2>/dev/null || true
+    fi
+    {
+        echo "============================================================"
+        echo "SpotX-Termux Uninstaller Log: $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || true)"
+        echo "Version: ${SPOTX_TERMUX_VERSION:-unknown}"
+        echo "Architecture: $(uname -m 2>/dev/null || echo 'unknown')"
+        echo "Prefix: ${PREFIX:-/data/data/com.termux/files/usr}"
+        echo "============================================================"
+    } > "$LOG_FILE" 2>/dev/null || true
+}
+
+log_msg() {
+    local level="$1"
+    shift
+    local msg="$*"
+    if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
+        local clean_msg
+        clean_msg=$(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' <<< "$msg" 2>/dev/null || echo "$msg")
+        local timestamp
+        timestamp=$(date "+%Y-%m-%d %H:%M:%S" 2>/dev/null || true)
+        echo "[$timestamp] [$level] $clean_msg" >> "$LOG_FILE" 2>/dev/null || true
+    fi
+}
+
+info()    { echo -e "${CYAN}${BOLD}[*]${CLR} $*"; log_msg "INFO" "$*"; }
+success() { echo -e "${GREEN}${BOLD}[OK]${CLR} $*"; log_msg "OK" "$*"; }
+warn()    { echo -e "${YELLOW}${BOLD}[! ]${CLR} $*"; log_msg "WARN" "$*"; }
+error()   { echo -e "${RED}${BOLD}[X ]${CLR} $*" >&2; log_msg "ERROR" "$*"; }
 
 CONTAINER_NAME="ubuntu"
 PREFIX_DIR="${PREFIX:-/data/data/com.termux/files/usr}"
@@ -45,6 +77,7 @@ PURGE_PKGS=0
 SELECTED_ACTION=""
 
 show_banner() {
+    setup_logging
     echo -e "${RED}${BOLD}"
     echo "  ____             _  __  __   _   _       _           _        _ _ "
     echo " / ___| _ __   ___| |_\ \/ /  | | | |_ __ (_)_ __  ___| |_ __ _| | |"
@@ -223,9 +256,14 @@ action_clean_cache() {
         warn "PRoot container '${CONTAINER_NAME}' not found. Skipping container cache cleanup."
     fi
 
-    # Host temp cleanup
+    # Host temp and log cleanup
     rm -rf "${TMP_DIR}/.X11-unix" "${TMP_DIR}/.X0-lock" 2>/dev/null || true
+    if [ -d "$LOG_DIR" ]; then
+        info "Cleaning old rotated logs in ${LOG_DIR}..."
+        rm -f "${LOG_DIR}"/*.old 2>/dev/null || true
+    fi
     success "Cache and temporary files successfully cleaned!"
+    info "Cleanup log saved to ${LOG_FILE}"
 }
 
 action_revert_spotx() {
@@ -243,7 +281,7 @@ action_revert_spotx() {
             echo "[*] Restoring xpui.spa from backup..."
             cp -f /usr/share/spotify/Apps/xpui.spa.bak /usr/share/spotify/Apps/xpui.spa
             rm -f /usr/share/spotify/Apps/xpui.spa.bak
-            echo "[✔] xpui.spa successfully restored!"
+            echo "[OK] xpui.spa successfully restored!"
         else
             echo "[*] Downloading SpotX-Bash official uninstaller..."
             curl -sSL https://raw.githubusercontent.com/SpotX-Official/SpotX-Bash/main/spotx.sh | bash -s -- --uninstall -P /usr/share/spotify || true
@@ -251,6 +289,7 @@ action_revert_spotx() {
     '
 
     success "SpotX patch removed. Spotify restored to official stock state."
+    info "Log saved to ${LOG_FILE}"
 }
 
 action_remove_spotify_only() {
@@ -284,6 +323,7 @@ action_remove_spotify_only() {
 
     remove_launchers
     success "Spotify and SpotX removed. Ubuntu container is intact."
+    info "Log saved to ${LOG_FILE}"
 }
 
 action_full_uninstall() {
@@ -293,7 +333,7 @@ action_full_uninstall() {
     warn "This operation will completely remove:"
     echo -e "  - All running Spotify, PulseAudio, and Termux-X11 processes"
     echo -e "  - The entire PRoot container '${BOLD}${CONTAINER_NAME}${CLR}' (~1+ GB of storage freed)"
-    echo -e "  - All Spotify commands (${BOLD}spotify${CLR}, ${BOLD}spotify-stop${CLR}, ${BOLD}spotify-update${CLR}, ${BOLD}spotify-uninstall${CLR})"
+    echo -e "  - All Spotify commands (${BOLD}spotify${CLR}, ${BOLD}spotify-stop${CLR}, ${BOLD}spotify-update${CLR}, ${BOLD}spotify-doctor${CLR}, ${BOLD}spotify-uninstall${CLR})"
     echo -e "  - Home screen widget shortcuts (${BOLD}Spotify${CLR}, ${BOLD}Spotify-Stop${CLR})"
     echo
 
@@ -340,6 +380,12 @@ action_full_uninstall() {
 
     # 3. Remove launchers and shortcuts
     remove_launchers
+
+    # 4. Remove .spotx-termux directory
+    if [ -d "${HOME}/.spotx-termux" ]; then
+        rm -rf "${HOME}/.spotx-termux" 2>/dev/null || true
+        info "Removed: ${HOME}/.spotx-termux directory"
+    fi
 
     echo
     echo -e "${GREEN}${BOLD}======================================================${CLR}"
