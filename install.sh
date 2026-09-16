@@ -455,6 +455,27 @@ exec "$HOME/doctor-spotify.sh" "$@"
 DOCTOR_CMD
 chmod +x "$DOCTOR_BIN"
 
+# Install media control script and wrapper
+CONTROL_SCRIPT_LOCAL=""
+if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/control-spotify.sh" ]; then
+    CONTROL_SCRIPT_LOCAL="${SCRIPT_DIR}/src/control-spotify.sh"
+fi
+CONTROL_SCRIPT_DEST="${HOME}/control-spotify.sh"
+CONTROL_BIN="${BIN_DIR}/spotify-control"
+
+if [ -n "$CONTROL_SCRIPT_LOCAL" ] && [ -f "$CONTROL_SCRIPT_LOCAL" ]; then
+    cp "$CONTROL_SCRIPT_LOCAL" "$CONTROL_SCRIPT_DEST"
+else
+    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/control-spotify.sh?t=$(date +%s)" -o "$CONTROL_SCRIPT_DEST"
+fi
+chmod +x "$CONTROL_SCRIPT_DEST"
+
+cat << 'CONTROL_CMD' > "$CONTROL_BIN"
+#!/usr/bin/env bash
+exec "$HOME/control-spotify.sh" "$@"
+CONTROL_CMD
+chmod +x "$CONTROL_BIN"
+
 # Termux:Widget shortcut support (pre-creates ~/.shortcuts directory)
 SHORTCUTS_DIR="${HOME}/.shortcuts"
 ICONS_DIR="${SHORTCUTS_DIR}/icons"
@@ -495,6 +516,7 @@ echo -e "     (Download: https://github.com/termux/termux-x11/releases)"
 echo -e "  2. In Termux, simply type:"
 echo -e "     ${BOLD}${GREEN}spotify${CLR}           - Launch Spotify SpotX"
 echo -e "     ${BOLD}${GREEN}spotify-stop${CLR}      - Stop Spotify and all background processes"
+echo -e "     ${BOLD}${GREEN}spotify-control${CLR}   - Control media playback (play, pause, next, prev)"
 echo -e "     ${BOLD}${GREEN}spotify-update${CLR}    - Update Spotify or re-apply SpotX patch"
 echo -e "     ${BOLD}${GREEN}spotify-doctor${CLR}    - Run health check and diagnostic tool"
 echo -e "     ${BOLD}${GREEN}spotify-uninstall${CLR} - Uninstall or clean up"

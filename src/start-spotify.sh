@@ -183,6 +183,16 @@ cleanup() {
 
     echo -e "\n${YELLOW}[*] Shutting down SpotX Spotify and background services...${CLR}"
 
+    # Stop Android notification media bridge and dismiss notification
+    if [ -n "${NOTIFY_BRIDGE_PID:-}" ]; then
+        kill "$NOTIFY_BRIDGE_PID" 2>/dev/null || true
+    fi
+    pkill -f "spotx-media.fifo" 2>/dev/null || true
+    if command -v termux-notification-remove >/dev/null 2>&1; then
+        termux-notification-remove "spotx-player" 2>/dev/null || true
+    fi
+    rm -f "${TERMUX_TMP}/spotx-media.fifo" "${TERMUX_TMP}/spotx-control.fifo" "${TERMUX_TMP}/spotx-media.status" "${TERMUX_TMP}/spotx-media.status.tmp" 2>/dev/null || true
+
     # Terminate container Spotify and window manager processes
     pkill -x spotify 2>/dev/null || true
     pkill -f "/usr/share/spotify/spotify" 2>/dev/null || true
@@ -225,7 +235,57 @@ cleanup() {
 # Trap signals: Ctrl+C (INT), SIGTERM (TERM), SIGHUP (HUP), and normal script exit (EXIT)
 trap cleanup EXIT INT TERM HUP
 
-# 5. Execute Spotify inside PRoot Ubuntu container in background
+# 5. Start Android Media Notification Bridge if termux-notification is available
+NOTIFY_BRIDGE_PID=""
+if command -v termux-notification >/dev/null 2>&1; then
+    mkdir -p "${TERMUX_TMP}"
+    rm -f "${TERMUX_TMP}/spotx-media.fifo"
+    mkfifo "${TERMUX_TMP}/spotx-media.fifo" 2>/dev/null || true
+
+    if [ -p "${TERMUX_TMP}/spotx-media.fifo" ]; then
+        (
+            while [ -p "${TERMUX_TMP}/spotx-media.fifo" ]; do
+                while read -r line; do
+                    [ -z "$line" ] && continue
+                    status="${line%%:::*}"
+                    rest="${line#*:::}"
+                    artist="${rest%%:::*}"
+                    title="${rest#*:::}"
+
+                    title="${title:-SpotX Spotify}"
+                    artist="${artist:-Termux PRoot}"
+
+                    local_title="$title"
+                    if [ "$status" = "Paused" ]; then
+                        local_title="[Paused] $title"
+                    fi
+
+                    ctrl_bin="${PREFIX:-/data/data/com.termux/files/usr}/bin/spotify-control"
+                    if [ ! -x "$ctrl_bin" ] && [ -x "${HOME}/control-spotify.sh" ]; then
+                        ctrl_bin="${HOME}/control-spotify.sh"
+                    fi
+
+                    termux-notification \
+                        --id "spotx-player" \
+                        --type media \
+                        --title "$local_title" \
+                        --content "$artist" \
+                        --alert-once \
+                        --ongoing true \
+                        --priority high \
+                        --media-previous "${ctrl_bin} previous" \
+                        --media-pause "${ctrl_bin} pause" \
+                        --media-play "${ctrl_bin} play" \
+                        --media-next "${ctrl_bin} next" 2>/dev/null || true
+                done < "${TERMUX_TMP}/spotx-media.fifo" 2>/dev/null || true
+                sleep 0.2
+            done
+        ) &
+        NOTIFY_BRIDGE_PID=$!
+    fi
+fi
+
+# 6. Execute Spotify inside PRoot Ubuntu container in background
 echo -e "${GREEN}${BOLD}[OK] Starting Spotify in Ubuntu container...${CLR}"
 # Filter known PRoot futex warnings that occur when threads are killed
 proot-distro login ubuntu --shared-tmp -- env DISPLAY=:0 PULSE_SERVER=tcp:127.0.0.1:4713 /usr/local/bin/spotify-termux "$@" 2> >(grep -v "The futex facility returned an unexpected error code" >&2) &

@@ -205,7 +205,7 @@ fi
 
 # Check 1.6: SpotX-Termux CLI commands
 BIN_DIR="${PREFIX:-/data/data/com.termux/files/usr}/bin"
-SPOTX_COMMANDS=("spotify" "spotify-stop" "spotify-update" "spotify-uninstall" "spotify-doctor")
+SPOTX_COMMANDS=("spotify" "spotify-stop" "spotify-control" "spotify-update" "spotify-uninstall" "spotify-doctor")
 MISSING_CMDS=()
 for cmd in "${SPOTX_COMMANDS[@]}"; do
     if [ ! -x "${BIN_DIR}/${cmd}" ]; then
@@ -214,7 +214,7 @@ for cmd in "${SPOTX_COMMANDS[@]}"; do
 done
 
 if [ ${#MISSING_CMDS[@]} -eq 0 ]; then
-    echo -e "  ${SYM_PASS} SpotX Command Wrappers:     ${GREEN}ready${CLR} ${DIM}(spotify, stop, update, uninstall, doctor)${CLR}"
+    echo -e "  ${SYM_PASS} SpotX Command Wrappers:     ${GREEN}ready${CLR} ${DIM}(spotify, stop, control, update, uninstall, doctor)${CLR}"
     record_pass
 else
     echo -e "  ${SYM_WARN} SpotX Command Wrappers:     ${YELLOW}missing: ${MISSING_CMDS[*]}${CLR}"
@@ -440,6 +440,13 @@ else
         else
             echo "GUEST_RUNNER=no"
         fi
+
+        # Playerctl media controls check
+        if command -v playerctl >/dev/null 2>&1; then
+            echo "GUEST_PLAYERCTL=yes"
+        else
+            echo "GUEST_PLAYERCTL=no"
+        fi
     ' 2>/dev/null || true)
 
     GUEST_RESPONSIVE=""
@@ -450,6 +457,7 @@ else
     GUEST_VER=""
     GUEST_SPOTX=""
     GUEST_RUNNER=""
+    GUEST_PLAYERCTL=""
 
     if [ -n "$CONTAINER_PROBE_OUTPUT" ]; then
         while IFS='=' read -r key val; do
@@ -462,6 +470,7 @@ else
                 GUEST_VER)         GUEST_VER="$val" ;;
                 GUEST_SPOTX)       GUEST_SPOTX="$val" ;;
                 GUEST_RUNNER)      GUEST_RUNNER="$val" ;;
+                GUEST_PLAYERCTL)   GUEST_PLAYERCTL="$val" ;;
             esac
         done <<< "$CONTAINER_PROBE_OUTPUT"
     fi
@@ -555,6 +564,15 @@ else
     else
         echo -e "  ${SYM_FAIL} Container Runner:           ${RED}missing${CLR} ${DIM}(/usr/local/bin/spotify-termux)${CLR}"
         record_fail "Missing Container Runner" "Run 'spotify-update' to regenerate /usr/local/bin/spotify-termux."
+    fi
+
+    # MPRIS Media Controls (playerctl)
+    if [ "$GUEST_PLAYERCTL" = "yes" ]; then
+        echo -e "  ${SYM_PASS} MPRIS Media Controls:       ${GREEN}playerctl ready${CLR} ${DIM}(notification controls active)${CLR}"
+        record_pass
+    else
+        echo -e "  ${SYM_WARN} MPRIS Media Controls:       ${YELLOW}playerctl not installed${CLR} ${DIM}(notification controls unavailable)${CLR}"
+        record_warn "MPRIS Media Controls Missing" "Run 'spotify-update' to install playerctl inside Ubuntu."
     fi
 fi
 

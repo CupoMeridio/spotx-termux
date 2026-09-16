@@ -282,6 +282,7 @@ if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
     sync_host_script "update-spotify.sh" "src/update-spotify.sh" "${HOME}/update-spotify.sh"
     sync_host_script "uninstall.sh" "uninstall.sh" "${HOME}/uninstall-spotify.sh"
     sync_host_script "doctor.sh" "src/doctor.sh" "${HOME}/doctor-spotify.sh"
+    sync_host_script "control-spotify.sh" "src/control-spotify.sh" "${HOME}/control-spotify.sh"
 
     # Update version marker file from local repo or GitHub remote
     NEW_SPOTX_VER=""
@@ -314,6 +315,12 @@ STOP_CMD
 exec "$HOME/doctor-spotify.sh" "$@"
 DOCTOR_CMD
     chmod +x "${HOST_BIN_DIR}/spotify-doctor"
+
+    cat << 'CONTROL_CMD' > "${HOST_BIN_DIR}/spotify-control"
+#!/usr/bin/env bash
+exec "$HOME/control-spotify.sh" "$@"
+CONTROL_CMD
+    chmod +x "${HOST_BIN_DIR}/spotify-control"
 
     # Ensure Termux:Widget shortcuts are kept up to date
     SHORTCUTS_DIR="${HOME}/.shortcuts"

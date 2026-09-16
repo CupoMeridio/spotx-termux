@@ -249,7 +249,8 @@ apt-get install -y --no-install-recommends \
     xdg-utils \
     fonts-dejavu-core \
     matchbox-window-manager \
-    pulseaudio-utils || true
+    pulseaudio-utils \
+    playerctl || true
 
 # Install transitional/architecture libraries (handling Ubuntu 24.04 64-bit time_t suffix)
 apt-get install -y --no-install-recommends \
@@ -509,6 +510,58 @@ if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] || [ "${DBUS_SESSION_BUS_ADDRESS}" = "
     fi
 fi
 
+# Export D-Bus session bus address to shared tmp
+if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    echo "$DBUS_SESSION_BUS_ADDRESS" > /tmp/spotx-dbus-address 2>/dev/null || true
+    echo "export DBUS_SESSION_BUS_ADDRESS=\"$DBUS_SESSION_BUS_ADDRESS\"" > /tmp/spotx-dbus.env 2>/dev/null || true
+fi
+
+# Start background media control and metadata bridge if playerctl is present
+BRIDGE_PID=""
+META_PID=""
+if command -v playerctl >/dev/null 2>&1; then
+    # 1. Listen for host control commands (play, pause, next, previous) via FIFO
+    (
+        rm -f /tmp/spotx-control.fifo
+        mkfifo /tmp/spotx-control.fifo 2>/dev/null || true
+        if [ -p /tmp/spotx-control.fifo ]; then
+            exec 3<> /tmp/spotx-control.fifo
+            while read -r -u 3 cmd; do
+                case "$cmd" in
+                    play-pause) playerctl -p spotify play-pause 2>/dev/null || true ;;
+                    play)       playerctl -p spotify play 2>/dev/null || true ;;
+                    pause)      playerctl -p spotify pause 2>/dev/null || true ;;
+                    next)       playerctl -p spotify next 2>/dev/null || true ;;
+                    previous)   playerctl -p spotify previous 2>/dev/null || true ;;
+                    quit|stop)  break ;;
+                esac
+            done
+            exec 3>&-
+        fi
+    ) &
+    BRIDGE_PID=$!
+
+    # 2. Monitor Spotify MPRIS metadata and playback status changes
+    (
+        for ((i=1; i<=40; i++)); do
+            if playerctl -p spotify status >/dev/null 2>&1; then
+                break
+            fi
+            sleep 0.5
+        done
+        if playerctl -p spotify status >/dev/null 2>&1; then
+            playerctl -p spotify metadata --format '{{status}}:::{{artist}}:::{{title}}' --follow 2>/dev/null | while IFS= read -r line; do
+                [ -z "$line" ] && continue
+                echo "$line" > /tmp/spotx-media.status.tmp 2>/dev/null && mv -f /tmp/spotx-media.status.tmp /tmp/spotx-media.status 2>/dev/null || true
+                if [ -p /tmp/spotx-media.fifo ]; then
+                    ( echo "$line" > /tmp/spotx-media.fifo 2>/dev/null & )
+                fi
+            done
+        fi
+    ) &
+    META_PID=$!
+fi
+
 # Launch Matchbox window manager to automatically adapt Spotify to full screen
 WM_PID=""
 if command -v matchbox-window-manager >/dev/null 2>&1; then
@@ -536,10 +589,17 @@ _SPOTX_FILTER='libayatana-appindicator is deprecated|cannot open /proc/bus/pci/d
     "$@" 2> >(grep -vE "$_SPOTX_FILTER" >&2)
 SPOTIFY_EXIT_CODE=$?
 
-# Terminate window manager on exit
+# Terminate media bridge and window manager on exit
+if [ -n "$BRIDGE_PID" ]; then
+    kill "$BRIDGE_PID" 2>/dev/null || true
+fi
+if [ -n "$META_PID" ]; then
+    kill "$META_PID" 2>/dev/null || true
+fi
 if [ -n "$WM_PID" ]; then
     kill "$WM_PID" 2>/dev/null || true
 fi
+rm -f /tmp/spotx-control.fifo /tmp/spotx-media.status /tmp/spotx-media.status.tmp /tmp/spotx-dbus-address /tmp/spotx-dbus.env 2>/dev/null || true
 
 exit $SPOTIFY_EXIT_CODE
 RUNNER
