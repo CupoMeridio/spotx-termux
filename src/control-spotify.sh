@@ -5,32 +5,29 @@
 # ==============================================================================
 set -euo pipefail
 
-# Resolve SpotX-Termux project version (CalVer: YYYY.MM.DD)
-SPOTX_TERMUX_VERSION=""
-if [ -f "${HOME}/.spotx-termux-version" ]; then
-    SPOTX_TERMUX_VERSION=$(cat "${HOME}/.spotx-termux-version" 2>/dev/null | tr -d '[:space:]')
-fi
-if [ -z "$SPOTX_TERMUX_VERSION" ] && [ -n "${BASH_SOURCE[0]:-}" ]; then
-    _ctrl_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
-    if [ -f "${_ctrl_dir}/../VERSION" ]; then
-        SPOTX_TERMUX_VERSION=$(cat "${_ctrl_dir}/../VERSION" 2>/dev/null | tr -d '[:space:]')
-    elif [ -f "${_ctrl_dir}/VERSION" ]; then
-        SPOTX_TERMUX_VERSION=$(cat "${_ctrl_dir}/VERSION" 2>/dev/null | tr -d '[:space:]')
+# ------------------------------------------------------------------------------
+# Load SpotX-Termux Shared Library
+# ------------------------------------------------------------------------------
+_SPOTX_LIB=""
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+    _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+    if [ -f "${_SCRIPT_DIR}/common.sh" ]; then
+        _SPOTX_LIB="${_SCRIPT_DIR}/common.sh"
+    elif [ -f "${_SCRIPT_DIR}/src/common.sh" ]; then
+        _SPOTX_LIB="${_SCRIPT_DIR}/src/common.sh"
     fi
 fi
-: "${SPOTX_TERMUX_VERSION:=unknown}"
+if [ -z "$_SPOTX_LIB" ] && [ -f "${HOME}/.spotx-termux/common.sh" ]; then
+    _SPOTX_LIB="${HOME}/.spotx-termux/common.sh"
+fi
 
-# ANSI colors
-CLR='\033[0m'
-BOLD='\033[1m'
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
-
-TMP_DIR="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}"
-CONTROL_FIFO="${TMP_DIR}/spotx-control.fifo"
-STATUS_FILE="${TMP_DIR}/spotx-media.status"
+if [ -z "$_SPOTX_LIB" ] || [ ! -f "$_SPOTX_LIB" ]; then
+    echo "[X] Error: SpotX-Termux shared library not found (~/.spotx-termux/common.sh)" >&2
+    echo "    Please run 'bash ~/update-spotify.sh' or 'bash install.sh' to repair." >&2
+    exit 1
+fi
+# shellcheck source=/dev/null
+source "$_SPOTX_LIB"
 
 show_help() {
     cat << EOF

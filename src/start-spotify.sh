@@ -4,30 +4,30 @@
 # ==============================================================================
 set -e
 
-# Resolve SpotX-Termux project version (CalVer: YYYY.MM.DD)
-SPOTX_TERMUX_VERSION=""
-if [ -f "${HOME}/.spotx-termux-version" ]; then
-    SPOTX_TERMUX_VERSION=$(cat "${HOME}/.spotx-termux-version" 2>/dev/null | tr -d '[:space:]')
-fi
-if [ -z "$SPOTX_TERMUX_VERSION" ] && [ -n "${BASH_SOURCE[0]:-}" ]; then
+# ------------------------------------------------------------------------------
+# Load SpotX-Termux Shared Library
+# ------------------------------------------------------------------------------
+_SPOTX_LIB=""
+_start_script_dir=""
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
     _start_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
-    if [ -f "${_start_script_dir}/../VERSION" ]; then
-        SPOTX_TERMUX_VERSION=$(cat "${_start_script_dir}/../VERSION" 2>/dev/null | tr -d '[:space:]')
-    elif [ -f "${_start_script_dir}/VERSION" ]; then
-        SPOTX_TERMUX_VERSION=$(cat "${_start_script_dir}/VERSION" 2>/dev/null | tr -d '[:space:]')
+    if [ -f "${_start_script_dir}/common.sh" ]; then
+        _SPOTX_LIB="${_start_script_dir}/common.sh"
+    elif [ -f "${_start_script_dir}/src/common.sh" ]; then
+        _SPOTX_LIB="${_start_script_dir}/src/common.sh"
     fi
 fi
-: "${SPOTX_TERMUX_VERSION:=unknown}"
+if [ -z "$_SPOTX_LIB" ] && [ -f "${HOME}/.spotx-termux/common.sh" ]; then
+    _SPOTX_LIB="${HOME}/.spotx-termux/common.sh"
+fi
 
-# ANSI colors
-CLR='\033[0m'
-BOLD='\033[1m'
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
-
-TERMUX_TMP="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
+if [ -z "$_SPOTX_LIB" ] || [ ! -f "$_SPOTX_LIB" ]; then
+    echo "[X] Error: SpotX-Termux shared library not found (~/.spotx-termux/common.sh)" >&2
+    echo "    Please run 'bash ~/update-spotify.sh' or 'bash install.sh' to repair." >&2
+    exit 1
+fi
+# shellcheck source=/dev/null
+source "$_SPOTX_LIB"
 
 # ------------------------------------------------------------------------------
 # Handle --version flag

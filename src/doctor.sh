@@ -5,33 +5,30 @@
 # ==============================================================================
 set -u
 
-# Resolve SpotX-Termux project version (CalVer: YYYY.MM.DD)
-SPOTX_TERMUX_VERSION=""
+# ------------------------------------------------------------------------------
+# Load SpotX-Termux Shared Library
+# ------------------------------------------------------------------------------
+_SPOTX_LIB=""
 SCRIPT_DIR=""
 if [ -n "${BASH_SOURCE[0]:-}" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+    if [ -f "${SCRIPT_DIR}/common.sh" ]; then
+        _SPOTX_LIB="${SCRIPT_DIR}/common.sh"
+    elif [ -f "${SCRIPT_DIR}/src/common.sh" ]; then
+        _SPOTX_LIB="${SCRIPT_DIR}/src/common.sh"
+    fi
 fi
-if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/../VERSION" ]; then
-    SPOTX_TERMUX_VERSION=$(cat "${SCRIPT_DIR}/../VERSION" 2>/dev/null | tr -d '[:space:]')
-elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/VERSION" ]; then
-    SPOTX_TERMUX_VERSION=$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null | tr -d '[:space:]')
+if [ -z "$_SPOTX_LIB" ] && [ -f "${HOME}/.spotx-termux/common.sh" ]; then
+    _SPOTX_LIB="${HOME}/.spotx-termux/common.sh"
 fi
-if [ -z "$SPOTX_TERMUX_VERSION" ] && [ -f "${HOME}/.spotx-termux-version" ]; then
-    SPOTX_TERMUX_VERSION=$(cat "${HOME}/.spotx-termux-version" 2>/dev/null | tr -d '[:space:]')
-fi
-if [ -z "$SPOTX_TERMUX_VERSION" ]; then
-    SPOTX_TERMUX_VERSION=$(curl -sSL --connect-timeout 3 --max-time 5 "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/VERSION?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
-fi
-: "${SPOTX_TERMUX_VERSION:=unknown}"
 
-# ANSI Colors
-CLR='\033[0m'
-BOLD='\033[1m'
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
-DIM='\033[2m'
+if [ -z "$_SPOTX_LIB" ] || [ ! -f "$_SPOTX_LIB" ]; then
+    echo "[X] Error: SpotX-Termux shared library not found (~/.spotx-termux/common.sh)" >&2
+    echo "    Please run 'bash ~/update-spotify.sh' or 'bash install.sh' to repair." >&2
+    exit 1
+fi
+# shellcheck source=/dev/null
+source "$_SPOTX_LIB"
 
 # Status Indicators (Text-based symbols, no emojis)
 SYM_PASS="${GREEN}${BOLD}[OK]${CLR}"
@@ -221,7 +218,16 @@ else
     record_warn "Missing Command Wrappers" "Re-run 'bash install.sh' to restore wrapper scripts in ${BIN_DIR}."
 fi
 
-# Check 1.7: SpotX-Termux Log Directory & Diagnostic Logs
+# Check 1.7: SpotX-Termux Shared Core Library
+if [ -f "${HOME}/.spotx-termux/common.sh" ]; then
+    echo -e "  ${SYM_PASS} Shared Core Library:        ${GREEN}installed${CLR} ${DIM}(~/.spotx-termux/common.sh)${CLR}"
+    record_pass
+else
+    echo -e "  ${SYM_WARN} Shared Core Library:        ${YELLOW}missing${CLR}"
+    record_warn "Missing Core Library" "Run 'spotify-update' to synchronize ~/.spotx-termux/common.sh."
+fi
+
+# Check 1.8: SpotX-Termux Log Directory & Diagnostic Logs
 LOG_DIR="${HOME}/.spotx-termux/logs"
 if [ -d "$LOG_DIR" ]; then
     FOUND_LOGS=()

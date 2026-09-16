@@ -5,82 +5,33 @@
 # ==============================================================================
 set -euo pipefail
 
-# ANSI color styles
-CLR='\033[0m'
-BOLD='\033[1m'
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
-
-# Logging configuration (~/.spotx-termux/logs/install.log with .old rotation)
-LOG_DIR="${HOME}/.spotx-termux/logs"
-LOG_FILE="${LOG_DIR}/install.log"
-
-setup_logging() {
-    mkdir -p "$LOG_DIR" 2>/dev/null || true
-    if [ -f "$LOG_FILE" ]; then
-        mv -f "$LOG_FILE" "${LOG_FILE}.old" 2>/dev/null || true
-    fi
-    {
-        echo "============================================================"
-        echo "SpotX-Termux Installer Log: $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || true)"
-        echo "Version: ${SPOTX_TERMUX_VERSION:-unknown}"
-        echo "Architecture: $(uname -m 2>/dev/null || echo 'unknown')"
-        echo "Prefix: ${PREFIX:-/data/data/com.termux/files/usr}"
-        echo "============================================================"
-    } > "$LOG_FILE" 2>/dev/null || true
-}
-
-log_msg() {
-    local level="$1"
-    shift
-    local msg="$*"
-    if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
-        local clean_msg
-        clean_msg=$(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' <<< "$msg" 2>/dev/null || echo "$msg")
-        local timestamp
-        timestamp=$(date "+%Y-%m-%d %H:%M:%S" 2>/dev/null || true)
-        echo "[$timestamp] [$level] $clean_msg" >> "$LOG_FILE" 2>/dev/null || true
-    fi
-}
-
-info()    { echo -e "${CYAN}${BOLD}[*]${CLR} $*"; log_msg "INFO" "$*"; }
-success() { echo -e "${GREEN}${BOLD}[OK]${CLR} $*"; log_msg "OK" "$*"; }
-warn()    { echo -e "${YELLOW}${BOLD}[! ]${CLR} $*"; log_msg "WARN" "$*"; }
-error()   { echo -e "${RED}${BOLD}[X ]${CLR} $*" >&2; log_msg "ERROR" "$*"; }
-
-notify_user() {
-    local title="$1"
-    local content="$2"
-    if command -v termux-notification >/dev/null 2>&1; then
-        termux-notification \
-            --title "$title" \
-            --content "$content" \
-            --id "spotx-status" \
-            --priority "high" 2>/dev/null || true
-    fi
-}
-
-# Resolve script directory early
+# ------------------------------------------------------------------------------
+# Load SpotX-Termux Shared Library (local repo, temporary cache, or remote fetch)
+# ------------------------------------------------------------------------------
+_SPOTX_LIB=""
 SCRIPT_DIR=""
 if [ -n "${BASH_SOURCE[0]:-}" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+    if [ -f "${SCRIPT_DIR}/src/common.sh" ]; then
+        _SPOTX_LIB="${SCRIPT_DIR}/src/common.sh"
+    elif [ -f "${SCRIPT_DIR}/common.sh" ]; then
+        _SPOTX_LIB="${SCRIPT_DIR}/common.sh"
+    fi
+fi
+if [ -z "$_SPOTX_LIB" ]; then
+    TMP_BOOTSTRAP_DIR="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
+    mkdir -p "$TMP_BOOTSTRAP_DIR" 2>/dev/null || true
+    _SPOTX_LIB="${TMP_BOOTSTRAP_DIR}/spotx-common.sh"
+    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/common.sh?t=$(date +%s)" -o "$_SPOTX_LIB" 2>/dev/null || true
 fi
 
-# Resolve SpotX-Termux project version (CalVer: YYYY.MM.DD)
-# Priority: local repo VERSION file → GitHub remote → installed marker → "unknown"
-SPOTX_TERMUX_VERSION=""
-if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/VERSION" ]; then
-    SPOTX_TERMUX_VERSION=$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null | tr -d '[:space:]')
+if [ -f "$_SPOTX_LIB" ]; then
+    # shellcheck source=/dev/null
+    source "$_SPOTX_LIB"
+else
+    echo "[X] Error: Could not load SpotX-Termux core library." >&2
+    exit 1
 fi
-if [ -z "$SPOTX_TERMUX_VERSION" ]; then
-    SPOTX_TERMUX_VERSION=$(curl -sSL --connect-timeout 3 --max-time 5 "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/VERSION?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
-fi
-if [ -z "$SPOTX_TERMUX_VERSION" ] && [ -f "${HOME}/.spotx-termux-version" ]; then
-    SPOTX_TERMUX_VERSION=$(cat "${HOME}/.spotx-termux-version" 2>/dev/null | tr -d '[:space:]')
-fi
-: "${SPOTX_TERMUX_VERSION:=unknown}"
 
 # Delegate to uninstaller if requested
 if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "-u" ]; then
@@ -134,7 +85,7 @@ for arg in "$@"; do
 done
 
 # Initialize logging for the installation run
-setup_logging
+setup_logging "install.log"
 
 echo -e "${GREEN}${BOLD}"
 echo "  ____             _  __  __   _____                                "
@@ -433,6 +384,22 @@ cat << 'UNINSTALL_CMD' > "$UNINSTALL_BIN"
 exec "$HOME/uninstall-spotify.sh" "$@"
 UNINSTALL_CMD
 chmod +x "$UNINSTALL_BIN"
+
+# Install shared core library to ~/.spotx-termux/common.sh
+mkdir -p "${HOME}/.spotx-termux"
+COMMON_SCRIPT_LOCAL=""
+if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/common.sh" ]; then
+    COMMON_SCRIPT_LOCAL="${SCRIPT_DIR}/src/common.sh"
+fi
+COMMON_SCRIPT_DEST="${HOME}/.spotx-termux/common.sh"
+if [ -n "$COMMON_SCRIPT_LOCAL" ] && [ -f "$COMMON_SCRIPT_LOCAL" ]; then
+    cp "$COMMON_SCRIPT_LOCAL" "$COMMON_SCRIPT_DEST"
+elif [ -n "${_SPOTX_LIB:-}" ] && [ -f "$_SPOTX_LIB" ]; then
+    cp "$_SPOTX_LIB" "$COMMON_SCRIPT_DEST"
+else
+    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/common.sh?t=$(date +%s)" -o "$COMMON_SCRIPT_DEST"
+fi
+chmod +x "$COMMON_SCRIPT_DEST"
 
 # Install doctor script and wrapper
 DOCTOR_SCRIPT_LOCAL=""

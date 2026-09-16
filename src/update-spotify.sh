@@ -5,78 +5,32 @@
 # ==============================================================================
 set -euo pipefail
 
-# Resolve SpotX-Termux project version (CalVer: YYYY.MM.DD)
-SPOTX_TERMUX_VERSION=""
+# ------------------------------------------------------------------------------
+# Load SpotX-Termux Shared Library
+# ------------------------------------------------------------------------------
+_SPOTX_LIB=""
 SCRIPT_DIR=""
 if [ -n "${BASH_SOURCE[0]:-}" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
-fi
-if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/../VERSION" ]; then
-    SPOTX_TERMUX_VERSION=$(cat "${SCRIPT_DIR}/../VERSION" 2>/dev/null | tr -d '[:space:]')
-elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/VERSION" ]; then
-    SPOTX_TERMUX_VERSION=$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null | tr -d '[:space:]')
-fi
-if [ -z "$SPOTX_TERMUX_VERSION" ] && [ -f "${HOME}/.spotx-termux-version" ]; then
-    SPOTX_TERMUX_VERSION=$(cat "${HOME}/.spotx-termux-version" 2>/dev/null | tr -d '[:space:]')
-fi
-: "${SPOTX_TERMUX_VERSION:=unknown}"
-
-# ANSI color codes
-CLR='\033[0m'
-BOLD='\033[1m'
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
-
-# Logging configuration (~/.spotx-termux/logs/update.log with .old rotation)
-LOG_DIR="${HOME}/.spotx-termux/logs"
-LOG_FILE="${LOG_DIR}/update.log"
-
-setup_logging() {
-    mkdir -p "$LOG_DIR" 2>/dev/null || true
-    if [ -f "$LOG_FILE" ]; then
-        mv -f "$LOG_FILE" "${LOG_FILE}.old" 2>/dev/null || true
+    if [ -f "${SCRIPT_DIR}/common.sh" ]; then
+        _SPOTX_LIB="${SCRIPT_DIR}/common.sh"
+    elif [ -f "${SCRIPT_DIR}/src/common.sh" ]; then
+        _SPOTX_LIB="${SCRIPT_DIR}/src/common.sh"
     fi
-    {
-        echo "============================================================"
-        echo "SpotX-Termux Updater Log: $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || true)"
-        echo "Version: ${SPOTX_TERMUX_VERSION:-unknown}"
-        echo "Architecture: $(uname -m 2>/dev/null || echo 'unknown')"
-        echo "Prefix: ${PREFIX:-/data/data/com.termux/files/usr}"
-        echo "============================================================"
-    } > "$LOG_FILE" 2>/dev/null || true
-}
+fi
+if [ -z "$_SPOTX_LIB" ] && [ -f "${HOME}/.spotx-termux/common.sh" ]; then
+    _SPOTX_LIB="${HOME}/.spotx-termux/common.sh"
+fi
 
-log_msg() {
-    local level="$1"
-    shift
-    local msg="$*"
-    if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
-        local clean_msg
-        clean_msg=$(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' <<< "$msg" 2>/dev/null || echo "$msg")
-        local timestamp
-        timestamp=$(date "+%Y-%m-%d %H:%M:%S" 2>/dev/null || true)
-        echo "[$timestamp] [$level] $clean_msg" >> "$LOG_FILE" 2>/dev/null || true
-    fi
-}
+if [ -z "$_SPOTX_LIB" ] || [ ! -f "$_SPOTX_LIB" ]; then
+    echo "[X] Error: SpotX-Termux shared library not found (~/.spotx-termux/common.sh)" >&2
+    echo "    Please run 'bash ~/update-spotify.sh' or 'bash install.sh' to repair." >&2
+    exit 1
+fi
+# shellcheck source=/dev/null
+source "$_SPOTX_LIB"
 
-info()    { echo -e "${CYAN}${BOLD}[*]${CLR} $*"; log_msg "INFO" "$*"; }
-success() { echo -e "${GREEN}${BOLD}[OK]${CLR} $*"; log_msg "OK" "$*"; }
-warn()    { echo -e "${YELLOW}${BOLD}[! ]${CLR} $*"; log_msg "WARN" "$*"; }
-error()   { echo -e "${RED}${BOLD}[X ]${CLR} $*" >&2; log_msg "ERROR" "$*"; }
 
-notify_user() {
-    local title="$1"
-    local content="$2"
-    if command -v termux-notification >/dev/null 2>&1; then
-        termux-notification \
-            --title "$title" \
-            --content "$content" \
-            --id "spotx-status" \
-            --priority "high" 2>/dev/null || true
-    fi
-}
 
 show_help() {
     cat << EOF
@@ -157,7 +111,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # Initialize logging for the update run
-setup_logging
+setup_logging "update.log"
 
 echo -e "${CYAN}======================================================${CLR}"
 echo -e "${CYAN}${BOLD}   SpotX Termux - Updater Orchestrator               ${CLR}"
@@ -278,6 +232,8 @@ if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
     }
 
     info "Synchronizing host scripts and configuration..."
+    mkdir -p "${HOME}/.spotx-termux"
+    sync_host_script "common.sh" "src/common.sh" "${HOME}/.spotx-termux/common.sh"
     sync_host_script "start-spotify.sh" "src/start-spotify.sh" "${HOME}/start-spotify.sh"
     sync_host_script "update-spotify.sh" "src/update-spotify.sh" "${HOME}/update-spotify.sh"
     sync_host_script "uninstall.sh" "uninstall.sh" "${HOME}/uninstall-spotify.sh"

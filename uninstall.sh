@@ -5,65 +5,42 @@
 # ==============================================================================
 set -euo pipefail
 
-# Resolve SpotX-Termux project version (CalVer: YYYY.MM.DD)
-SPOTX_TERMUX_VERSION=""
-_uninstall_script_dir=""
+# ------------------------------------------------------------------------------
+# Load SpotX-Termux Shared Library
+# ------------------------------------------------------------------------------
+_SPOTX_LIB=""
 if [ -n "${BASH_SOURCE[0]:-}" ]; then
-    _uninstall_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+    _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+    if [ -f "${_SCRIPT_DIR}/common.sh" ]; then
+        _SPOTX_LIB="${_SCRIPT_DIR}/common.sh"
+    elif [ -f "${_SCRIPT_DIR}/src/common.sh" ]; then
+        _SPOTX_LIB="${_SCRIPT_DIR}/src/common.sh"
+    fi
 fi
-if [ -n "$_uninstall_script_dir" ] && [ -f "${_uninstall_script_dir}/VERSION" ]; then
-    SPOTX_TERMUX_VERSION=$(cat "${_uninstall_script_dir}/VERSION" 2>/dev/null | tr -d '[:space:]')
+if [ -z "$_SPOTX_LIB" ] && [ -f "${HOME}/.spotx-termux/common.sh" ]; then
+    _SPOTX_LIB="${HOME}/.spotx-termux/common.sh"
 fi
-if [ -z "$SPOTX_TERMUX_VERSION" ] && [ -f "${HOME}/.spotx-termux-version" ]; then
-    SPOTX_TERMUX_VERSION=$(cat "${HOME}/.spotx-termux-version" 2>/dev/null | tr -d '[:space:]')
-fi
-: "${SPOTX_TERMUX_VERSION:=unknown}"
 
-# ANSI color codes
-CLR='\033[0m'
-BOLD='\033[1m'
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
+if [ -n "$_SPOTX_LIB" ] && [ -f "$_SPOTX_LIB" ]; then
+    # shellcheck source=/dev/null
+    source "$_SPOTX_LIB"
+else
+    # Fallback for uninstaller if ~/.spotx-termux was already removed
+    SPOTX_TERMUX_VERSION="unknown"
+    CLR='\033[0m'
+    BOLD='\033[1m'
+    GREEN='\033[0;32m'
+    CYAN='\033[0;36m'
+    YELLOW='\033[0;33m'
+    RED='\033[0;31m'
+    DIM='\033[2m'
+    info()    { echo -e "${CYAN}${BOLD}[*]${CLR} $*"; }
+    success() { echo -e "${GREEN}${BOLD}[OK]${CLR} $*"; }
+    warn()    { echo -e "${YELLOW}${BOLD}[! ]${CLR} $*"; }
+    error()   { echo -e "${RED}${BOLD}[X ]${CLR} $*" >&2; }
+    setup_logging() { :; }
+fi
 WHITE='\033[1;37m'
-
-# Logging configuration (~/.spotx-termux/logs/uninstall.log with .old rotation)
-LOG_DIR="${HOME}/.spotx-termux/logs"
-LOG_FILE="${LOG_DIR}/uninstall.log"
-
-setup_logging() {
-    mkdir -p "$LOG_DIR" 2>/dev/null || true
-    if [ -f "$LOG_FILE" ]; then
-        mv -f "$LOG_FILE" "${LOG_FILE}.old" 2>/dev/null || true
-    fi
-    {
-        echo "============================================================"
-        echo "SpotX-Termux Uninstaller Log: $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || true)"
-        echo "Version: ${SPOTX_TERMUX_VERSION:-unknown}"
-        echo "Architecture: $(uname -m 2>/dev/null || echo 'unknown')"
-        echo "Prefix: ${PREFIX:-/data/data/com.termux/files/usr}"
-        echo "============================================================"
-    } > "$LOG_FILE" 2>/dev/null || true
-}
-
-log_msg() {
-    local level="$1"
-    shift
-    local msg="$*"
-    if [ -n "${LOG_FILE:-}" ] && [ -f "${LOG_FILE:-}" ]; then
-        local clean_msg
-        clean_msg=$(sed -E 's/\x1B\[[0-9;]*[a-zA-Z]//g' <<< "$msg" 2>/dev/null || echo "$msg")
-        local timestamp
-        timestamp=$(date "+%Y-%m-%d %H:%M:%S" 2>/dev/null || true)
-        echo "[$timestamp] [$level] $clean_msg" >> "$LOG_FILE" 2>/dev/null || true
-    fi
-}
-
-info()    { echo -e "${CYAN}${BOLD}[*]${CLR} $*"; log_msg "INFO" "$*"; }
-success() { echo -e "${GREEN}${BOLD}[OK]${CLR} $*"; log_msg "OK" "$*"; }
-warn()    { echo -e "${YELLOW}${BOLD}[! ]${CLR} $*"; log_msg "WARN" "$*"; }
-error()   { echo -e "${RED}${BOLD}[X ]${CLR} $*" >&2; log_msg "ERROR" "$*"; }
 
 CONTAINER_NAME="ubuntu"
 PREFIX_DIR="${PREFIX:-/data/data/com.termux/files/usr}"
@@ -218,10 +195,12 @@ remove_launchers() {
     local files_to_remove=(
         "${BIN_DIR}/spotify"
         "${BIN_DIR}/spotify-stop"
+        "${BIN_DIR}/spotify-control"
         "${BIN_DIR}/spotify-update"
         "${BIN_DIR}/spotify-doctor"
         "${BIN_DIR}/spotify-uninstall"
         "${HOME}/start-spotify.sh"
+        "${HOME}/control-spotify.sh"
         "${HOME}/update-spotify.sh"
         "${HOME}/uninstall-spotify.sh"
         "${HOME}/doctor-spotify.sh"
