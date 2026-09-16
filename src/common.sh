@@ -114,11 +114,13 @@ error()   { echo -e "${RED}${BOLD}[X ]${CLR} $*" >&2; log_msg "ERROR" "$*"; }
 notify_user() {
     local title="$1"
     local content="$2"
+    local icon="${3:-terminal}"
     if command -v termux-notification >/dev/null 2>&1; then
         termux-notification \
             --title "$title" \
             --content "$content" \
             --id "spotx-status" \
-            --priority "high" 2>/dev/null || true
+            --priority "high" \
+            --icon "$icon" 2>/dev/null || true
     fi
 }
