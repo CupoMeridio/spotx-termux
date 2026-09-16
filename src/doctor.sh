@@ -283,6 +283,37 @@ else
     echo -e "  ${SYM_INFO} Termux:Widget Shortcuts:    ${DIM}not found in ~/.shortcuts (optional)${CLR}"
 fi
 
+# Check 2.4: Termux:API Companion & System Notifications
+API_PKG_FOUND=false
+API_APP_FOUND=false
+
+if command -v termux-notification >/dev/null 2>&1; then
+    API_PKG_FOUND=true
+fi
+
+if [ "$IS_TERMUX" = true ]; then
+    if command -v pm >/dev/null 2>&1; then
+        if pm list packages com.termux.api 2>/dev/null | grep -q "com.termux.api"; then
+            API_APP_FOUND=true
+        fi
+    elif [ -d "/data/data/com.termux.api" ]; then
+        API_APP_FOUND=true
+    fi
+fi
+
+if [ "$API_PKG_FOUND" = true ] && [ "$API_APP_FOUND" = true ]; then
+    echo -e "  ${SYM_PASS} Termux:API Companion:       ${GREEN}ready${CLR} ${DIM}(package & com.termux.api APK detected)${CLR}"
+    record_pass
+elif [ "$API_PKG_FOUND" = true ] && [ "$API_APP_FOUND" = false ]; then
+    echo -e "  ${SYM_WARN} Termux:API Companion:       ${YELLOW}package installed, APK missing${CLR}"
+    record_warn "Termux:API APK Not Found" "Install Termux:API app from GitHub/F-Droid to enable Android system notifications."
+elif [ "$API_PKG_FOUND" = false ] && [ "$API_APP_FOUND" = true ]; then
+    echo -e "  ${SYM_WARN} Termux:API Companion:       ${YELLOW}APK detected, CLI package missing${CLR}"
+    record_warn "Termux:API Package Missing" "Run 'pkg install -y termux-api' to enable system notification support."
+else
+    echo -e "  ${SYM_INFO} Termux:API Companion:       ${DIM}not installed (optional, needed for Android notifications)${CLR}"
+fi
+
 echo
 
 # ==============================================================================

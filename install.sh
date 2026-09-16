@@ -273,8 +273,8 @@ if [ "$IS_TERMUX" = true ]; then
         warn "pkg update returned a warning. Continuing..."
     }
 
-    info "Installing required Termux packages (proot-distro, pulseaudio, etc.)..."
-    pkg install -y proot-distro pulseaudio wget curl jq
+    info "Installing required Termux packages (proot-distro, pulseaudio, termux-api, etc.)..."
+    pkg install -y proot-distro pulseaudio wget curl jq termux-api
 
     info "Installing Termux-X11 companion package..."
     pkg install -y termux-x11-nightly || {
