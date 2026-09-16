@@ -2,7 +2,7 @@
 # ==============================================================================
 # start-spotify.sh - Termux host launcher for SpotX Spotify on real Android hardware
 # ==============================================================================
-set -e
+set -euo pipefail
 
 # ------------------------------------------------------------------------------
 # Load SpotX-Termux Shared Library

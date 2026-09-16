@@ -100,12 +100,6 @@ echo -e "${CYAN}Version: ${BOLD}${SPOTX_TERMUX_VERSION}${CLR}"
 echo -e "${CYAN}---------------------------------------------------------------${CLR}\n"
 
 # 1. Environment check
-IS_TERMUX=false
-if [ -n "${TERMUX_VERSION:-}" ] || [ -d "/data/data/com.termux" ] || [[ "${PREFIX:-}" == *"com.termux"* ]]; then
-    IS_TERMUX=true
-fi
-
-ARCH="$(uname -m)"
 info "Detected architecture: ${ARCH}"
 
 if [ "$IS_TERMUX" = false ]; then

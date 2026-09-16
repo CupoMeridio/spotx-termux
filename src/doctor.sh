@@ -117,11 +117,6 @@ echo -e "${CYAN}======================================================${CLR}\n"
 echo -e "${BOLD}[1/4] Checking Termux Host Environment...${CLR}"
 
 # Check 1.1: Termux Detection
-IS_TERMUX=false
-if [ -n "${TERMUX_VERSION:-}" ] || [ -d "/data/data/com.termux" ] || [[ "${PREFIX:-}" == *"com.termux"* ]]; then
-    IS_TERMUX=true
-fi
-
 if [ "$IS_TERMUX" = true ]; then
     echo -e "  ${SYM_PASS} Termux Environment:         ${GREEN}detected${CLR} ${DIM}(${TERMUX_VERSION:-v0.118+})${CLR}"
     record_pass

@@ -178,11 +178,6 @@ chmod +x "$CONTAINER_SETUP_STAGING"
 
 if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
     # Auto-detect and install any newly required host packages (e.g. termux-api, jq, etc.)
-    IS_TERMUX=false
-    if [ -n "${TERMUX_VERSION:-}" ] || [ -d "/data/data/com.termux" ] || [[ "${PREFIX:-}" == *"com.termux"* ]]; then
-        IS_TERMUX=true
-    fi
-
     if [ "$IS_TERMUX" = true ] && command -v pkg >/dev/null 2>&1; then
         MISSING_HOST_PKGS=()
         command -v proot-distro >/dev/null 2>&1 || MISSING_HOST_PKGS+=("proot-distro")

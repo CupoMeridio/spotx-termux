@@ -54,7 +54,7 @@ PURGE_PKGS=0
 SELECTED_ACTION=""
 
 show_banner() {
-    setup_logging
+    setup_logging "uninstall.log"
     echo -e "${RED}${BOLD}"
     echo "  ____             _  __  __   _   _       _           _        _ _ "
     echo " / ___| _ __   ___| |_\ \/ /  | | | |_ __ (_)_ __  ___| |_ __ _| | |"
