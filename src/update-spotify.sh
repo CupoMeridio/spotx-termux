@@ -223,6 +223,27 @@ fi
 chmod +x "$CONTAINER_SETUP_STAGING"
 
 if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
+    # Auto-detect and install any newly required host packages (e.g. termux-api, jq, etc.)
+    IS_TERMUX=false
+    if [ -n "${TERMUX_VERSION:-}" ] || [ -d "/data/data/com.termux" ] || [[ "${PREFIX:-}" == *"com.termux"* ]]; then
+        IS_TERMUX=true
+    fi
+
+    if [ "$IS_TERMUX" = true ] && command -v pkg >/dev/null 2>&1; then
+        MISSING_HOST_PKGS=()
+        command -v proot-distro >/dev/null 2>&1 || MISSING_HOST_PKGS+=("proot-distro")
+        command -v pulseaudio >/dev/null 2>&1 || MISSING_HOST_PKGS+=("pulseaudio")
+        command -v wget >/dev/null 2>&1 || MISSING_HOST_PKGS+=("wget")
+        command -v curl >/dev/null 2>&1 || MISSING_HOST_PKGS+=("curl")
+        command -v jq >/dev/null 2>&1 || MISSING_HOST_PKGS+=("jq")
+        command -v termux-notification >/dev/null 2>&1 || MISSING_HOST_PKGS+=("termux-api")
+
+        if [ ${#MISSING_HOST_PKGS[@]} -gt 0 ]; then
+            info "Installing newly required host packages: ${MISSING_HOST_PKGS[*]}..."
+            pkg install -y "${MISSING_HOST_PKGS[@]}" 2>/dev/null || warn "Failed to auto-install some host packages: ${MISSING_HOST_PKGS[*]}"
+        fi
+    fi
+
     # Ensure Termux allows external apps
     mkdir -p "${HOME}/.termux"
     if grep -q "^[[:space:]]*allow-external-apps" "${HOME}/.termux/termux.properties" 2>/dev/null; then
