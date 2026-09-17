@@ -45,8 +45,9 @@ Prima di avviare l'installazione su Termux, installa le applicazioni necessarie:
   2. **Termux-X11**: Scarica l'APK companion da [GitHub Releases](https://github.com/termux/termux-x11/releases) (consigliato: `termux-x11-universal-debug.apk`).
 
 - **Facoltativo (consigliato per comodità):**
-  3. **Termux:Widget**: Scarica l'APK da [F-Droid](https://f-droid.org/packages/com.termux.widget/) oppure da [GitHub Releases](https://github.com/termux/termux-widget/releases). Permette di aggiungere una comoda icona/widget sulla home screen dello smartphone per avviare Spotify con un singolo tocco.  
-     > ⚠️ **Importante**: Devi scaricare il widget dalla **stessa identica fonte** usata per Termux (entrambi da F-Droid oppure entrambi da GitHub Releases). Se provengono da fonti diverse, Android ne bloccherà l'installazione per incompatibilità della firma crittografica. (Questo vincolo non si applica a Termux-X11, che è un'app indipendente).
+  3. **Termux:Widget**: Scarica l'APK da [F-Droid](https://f-droid.org/packages/com.termux.widget/) oppure da [GitHub Releases](https://github.com/termux/termux-widget/releases). Permette di aggiungere una comoda icona/widget sulla home screen dello smartphone per avviare Spotify con un singolo tocco.
+  4. **Termux:API**: Scarica l'APK companion da [F-Droid](https://f-droid.org/packages/com.termux.api/) oppure da [GitHub Releases](https://github.com/termux/termux-api/releases). Abilita le notifiche native di sistema Android (stato di avanzamento/completamento) e i controlli multimediali interattivi nella tendina delle notifiche.  
+     > ⚠️ **Importante**: Devi scaricare i componenti aggiuntivi di Termux (**Termux:Widget** e **Termux:API**) dalla **stessa identica fonte** usata per Termux (entrambi da F-Droid oppure entrambi da GitHub Releases). Se provengono da fonti diverse, Android ne bloccherà l'installazione per incompatibilità della firma crittografica. (Questo vincolo non si applica a Termux-X11, che è un'app indipendente).
 
 ---
 
@@ -128,6 +129,23 @@ Per garantire la corretta gestione delle risorse su Android, la chiusura di Spot
 
 ---
 
+## 🎵 Controlli Multimediali e Riproduzione in Background
+
+Quando Spotify è in esecuzione in background, puoi controllare la musica senza dover aprire la finestra di Termux-X11:
+
+1. **Controlli nella Tendina delle Notifiche Android (Richiede Termux:API)**:
+   Una notifica multimediale nativa comparirà nella tendina notifiche di Android mostrando titolo del brano, artista e stato di riproduzione, con pulsanti interattivi per **Precedente**, **Play/Pausa** e **Successivo**.
+2. **Comando da Terminale (`spotify-control`)**:
+   Esegui in qualsiasi momento da Termux:
+   ```bash
+   spotify-control play-pause   # Play / Pausa
+   spotify-control next         # Brano successivo
+   spotify-control prev         # Brano precedente
+   spotify-control status       # Mostra artista e titolo del brano in riproduzione
+   ```
+
+---
+
 ## 🔄 Aggiornamento e Manutenzione
 
 Spotify, SpotX e l'intera configurazione dell'ambiente (impostazioni Box64, nuove librerie native e launcher Termux) possono essere aggiornati in qualsiasi momento senza perdere dati e senza reinstallare il container:
@@ -176,7 +194,7 @@ spotify-doctor
 
 Il comando analizza l'intero sistema attraverso **4 livelli di verifica**:
 1. **Host Termux:** Architettura CPU (ARM64/x86_64), spazio su disco disponibile, pacchetti Termux richiesti (`proot-distro`, `pulseaudio`, `jq`, `curl`) e abilitazione del permesso `allow-external-apps`.
-2. **Integrazione Android & X11:** Pacchetto Termux-X11, presenza dell'APK Android `com.termux.x11` e scorciatoie per Termux:Widget.
+2. **Integrazione Android & Companion:** Pacchetto e APK Termux-X11, pacchetto e APK Termux:API, e scorciatoie per Termux:Widget.
 3. **Servizi Runtime:** Configurazione ottimizzata di PulseAudio (speex-float-1, 48kHz), stato del daemon audio e del display server X11.
 4. **Container Ubuntu PRoot:** Reattività del container, layer di traduzione Box64 e JIT, window manager, integrità del binario ELF di Spotify e stato della patch SpotX.
 
@@ -198,7 +216,7 @@ spotify-uninstall
 1. **Disinstallazione Completa (`--full` / `-f`)**:
    - Termina tutti i processi attivi di Spotify, Termux-X11 e PulseAudio.
    - Elimina completamente il container Ubuntu PRoot (**liberando oltre 1 GB di spazio**).
-   - Rimuove tutti i comandi (`spotify`, `spotify-stop`, `spotify-update`, `spotify-doctor`, `spotify-uninstall`) e le scorciatoie di Termux:Widget.
+   - Rimuove tutti i comandi (`spotify`, `spotify-stop`, `spotify-control`, `spotify-update`, `spotify-doctor`, `spotify-uninstall`) e le scorciatoie di Termux:Widget.
    - Chiede facoltativamente se disinstallare anche i pacchetti Termux non più utilizzati (`termux-x11-nightly`, `pulseaudio`).
 2. **Rimuovere solo Spotify & SpotX (`--keep-ubuntu` / `--spotify-only`)**:
    - Disinstalla Spotify, Box64, la mod SpotX e le cartelle di cache/configurazione dentro Ubuntu.
@@ -231,6 +249,8 @@ spotx-termux/
 ├── README.md               # Documentazione ufficiale (Inglese)
 ├── README.it.md            # Documentazione (Italiano)
 └── src/
+    ├── common.sh           # Libreria runtime condivisa (versioni, log, IPC, notifiche)
+    ├── control-spotify.sh  # Controller di riproduzione multimediale (bridge MPRIS)
     ├── doctor.sh           # Utility di diagnostica e health-check
     ├── guest-setup.sh      # Script eseguito dentro Ubuntu PRoot (Box64, Spotify, SpotX)
     ├── start-spotify.sh    # Script host per avviare PulseAudio, X11 e Spotify
