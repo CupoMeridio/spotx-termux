@@ -121,6 +121,6 @@ notify_user() {
             --content "$content" \
             --id "spotx-status" \
             --priority "high" \
-            --icon "$icon" 2>/dev/null || true
+            --icon "$icon" >/dev/null 2>&1 || true
     fi
 }

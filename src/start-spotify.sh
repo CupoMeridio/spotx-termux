@@ -256,8 +256,10 @@ if command -v termux-notification >/dev/null 2>&1; then
                     artist="${artist:-Termux PRoot}"
 
                     local_title="$title"
+                    play_btn="⏸ Pause"
                     if [ "$status" = "Paused" ]; then
                         local_title="[Paused] $title"
+                        play_btn="▶ Play"
                     fi
 
                     ctrl_bin="${PREFIX:-/data/data/com.termux/files/usr}/bin/spotify-control"
@@ -267,16 +269,18 @@ if command -v termux-notification >/dev/null 2>&1; then
 
                     termux-notification \
                         --id "spotx-player" \
-                        --type media \
                         --title "$local_title" \
                         --content "$artist" \
+                        --icon "audiotrack" \
                         --alert-once \
-                        --ongoing true \
+                        --ongoing \
                         --priority high \
-                        --media-previous "${ctrl_bin} previous" \
-                        --media-pause "${ctrl_bin} pause" \
-                        --media-play "${ctrl_bin} play" \
-                        --media-next "${ctrl_bin} next" 2>/dev/null || true
+                        --button1 "⏮ Prev" \
+                        --button1-action "${ctrl_bin} previous" \
+                        --button2 "$play_btn" \
+                        --button2-action "${ctrl_bin} play-pause" \
+                        --button3 "⏭ Next" \
+                        --button3-action "${ctrl_bin} next" >/dev/null 2>&1 || true
                 done < "${TERMUX_TMP}/spotx-media.fifo" 2>/dev/null || true
                 sleep 0.2
             done
