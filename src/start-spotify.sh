@@ -183,14 +183,16 @@ cleanup() {
 
     echo -e "\n${YELLOW}[*] Shutting down SpotX Spotify and background services...${CLR}"
 
-    # Stop Android notification media bridge and dismiss notification
+    # Remove Android media notification first (before killing the bridge)
+    if command -v termux-notification-remove >/dev/null 2>&1; then
+        termux-notification-remove "spotx-player" 2>/dev/null || true
+    fi
+
+    # Stop Android notification media bridge
     if [ -n "${NOTIFY_BRIDGE_PID:-}" ]; then
         kill "$NOTIFY_BRIDGE_PID" 2>/dev/null || true
     fi
     pkill -f "spotx-media.fifo" 2>/dev/null || true
-    if command -v termux-notification-remove >/dev/null 2>&1; then
-        termux-notification-remove "spotx-player" 2>/dev/null || true
-    fi
     rm -f "${TERMUX_TMP}/spotx-media.fifo" "${TERMUX_TMP}/spotx-control.fifo" "${TERMUX_TMP}/spotx-media.status" "${TERMUX_TMP}/spotx-media.status.tmp" 2>/dev/null || true
 
     # Terminate container Spotify and window manager processes
@@ -238,6 +240,12 @@ trap cleanup EXIT INT TERM HUP
 # 5. Start Android Media Notification Bridge if termux-notification is available
 NOTIFY_BRIDGE_PID=""
 if command -v termux-notification >/dev/null 2>&1; then
+    # Cleanup any orphan notification left by a previous session killed with SIGKILL
+    # (trap cleanup is not called on SIGKILL, so we clean up proactively here)
+    if command -v termux-notification-remove >/dev/null 2>&1; then
+        termux-notification-remove "spotx-player" 2>/dev/null || true
+    fi
+
     mkdir -p "${TERMUX_TMP}"
     rm -f "${TERMUX_TMP}/spotx-media.fifo"
     mkfifo "${TERMUX_TMP}/spotx-media.fifo" 2>/dev/null || true
@@ -273,7 +281,6 @@ if command -v termux-notification >/dev/null 2>&1; then
                         --content "$artist" \
                         --icon "audiotrack" \
                         --alert-once \
-                        --ongoing \
                         --priority high \
                         --button1 "⏮ Prev" \
                         --button1-action "${ctrl_bin} previous" \

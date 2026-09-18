@@ -196,11 +196,10 @@ if [ "$IS_TERMUX" = true ]; then
 fi
 
 # Check 1.6: SpotX-Termux CLI commands
-BIN_DIR="${PREFIX:-/data/data/com.termux/files/usr}/bin"
 SPOTX_COMMANDS=("spotify" "spotify-stop" "spotify-control" "spotify-update" "spotify-uninstall" "spotify-doctor")
 MISSING_CMDS=()
 for cmd in "${SPOTX_COMMANDS[@]}"; do
-    if [ ! -x "${BIN_DIR}/${cmd}" ]; then
+    if [ ! -x "${TERMUX_BIN}/${cmd}" ]; then
         MISSING_CMDS+=("$cmd")
     fi
 done
@@ -210,7 +209,7 @@ if [ ${#MISSING_CMDS[@]} -eq 0 ]; then
     record_pass
 else
     echo -e "  ${SYM_WARN} SpotX Command Wrappers:     ${YELLOW}missing: ${MISSING_CMDS[*]}${CLR}"
-    record_warn "Missing Command Wrappers" "Re-run 'bash install.sh' to restore wrapper scripts in ${BIN_DIR}."
+    record_warn "Missing Command Wrappers" "Re-run 'bash install.sh' to restore wrapper scripts in ${TERMUX_BIN}."
 fi
 
 # Check 1.7: SpotX-Termux Shared Core Library
@@ -359,17 +358,6 @@ echo
 echo -e "${BOLD}[4/4] Checking Ubuntu PRoot Container & Spotify...${CLR}"
 
 CONTAINER_NAME="ubuntu"
-is_container_installed() {
-    local name="$1"
-    local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
-    if [ -d "${prefix}/var/lib/proot-distro/containers/${name}" ] || \
-       [ -d "${prefix}/var/lib/proot-distro/installed-rootfs/${name}" ] || \
-       [ -d "/usr/var/lib/proot-distro/containers/${name}" ] || \
-       [ -d "/usr/var/lib/proot-distro/installed-rootfs/${name}" ]; then
-        return 0
-    fi
-    return 1
-}
 
 if ! command -v proot-distro >/dev/null 2>&1; then
     echo -e "  ${SYM_FAIL} PRoot Container:            ${RED}proot-distro not installed${CLR}"

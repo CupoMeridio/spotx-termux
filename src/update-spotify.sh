@@ -127,20 +127,6 @@ if ! command -v proot-distro > /dev/null 2>&1; then
     exit 1
 fi
 
-is_container_installed() {
-    local name="$1"
-    local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
-    if [ -d "${prefix}/var/lib/proot-distro/containers/${name}" ] || \
-       [ -d "${prefix}/var/lib/proot-distro/installed-rootfs/${name}" ] || \
-       [ -d "/usr/var/lib/proot-distro/containers/${name}" ] || \
-       [ -d "/usr/var/lib/proot-distro/installed-rootfs/${name}" ]; then
-        return 0
-    fi
-    if proot-distro login "$name" -- true >/dev/null 2>&1; then
-        return 0
-    fi
-    return 1
-}
 
 # Verify container exists
 if ! is_container_installed "$CONTAINER_NAME"; then
@@ -160,9 +146,8 @@ fi
 
 REMOTE_REPO_RAW="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/guest-setup.sh"
 
-TMP_DIR="${PREFIX:-/usr}/tmp"
-mkdir -p "$TMP_DIR"
-CONTAINER_SETUP_STAGING="${TMP_DIR}/spotx-guest-setup.sh"
+mkdir -p "$TERMUX_TMP"
+CONTAINER_SETUP_STAGING="${TERMUX_TMP}/spotx-guest-setup.sh"
 
 # Ensure cleanup on exit
 trap 'rm -f "$CONTAINER_SETUP_STAGING"' EXIT
@@ -261,25 +246,24 @@ if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
     fi
 
     # Ensure spotify-stop and spotify-doctor wrappers exist in $BIN_DIR
-    HOST_BIN_DIR="${PREFIX:-/data/data/com.termux/files/usr}/bin"
-    mkdir -p "$HOST_BIN_DIR"
-    cat << 'STOP_CMD' > "${HOST_BIN_DIR}/spotify-stop"
+    mkdir -p "$TERMUX_BIN"
+    cat << 'STOP_CMD' > "${TERMUX_BIN}/spotify-stop"
 #!/usr/bin/env bash
 exec "$HOME/start-spotify.sh" --stop "$@"
 STOP_CMD
-    chmod +x "${HOST_BIN_DIR}/spotify-stop"
+    chmod +x "${TERMUX_BIN}/spotify-stop"
 
-    cat << 'DOCTOR_CMD' > "${HOST_BIN_DIR}/spotify-doctor"
+    cat << 'DOCTOR_CMD' > "${TERMUX_BIN}/spotify-doctor"
 #!/usr/bin/env bash
 exec "$HOME/doctor-spotify.sh" "$@"
 DOCTOR_CMD
-    chmod +x "${HOST_BIN_DIR}/spotify-doctor"
+    chmod +x "${TERMUX_BIN}/spotify-doctor"
 
-    cat << 'CONTROL_CMD' > "${HOST_BIN_DIR}/spotify-control"
+    cat << 'CONTROL_CMD' > "${TERMUX_BIN}/spotify-control"
 #!/usr/bin/env bash
 exec "$HOME/control-spotify.sh" "$@"
 CONTROL_CMD
-    chmod +x "${HOST_BIN_DIR}/spotify-control"
+    chmod +x "${TERMUX_BIN}/spotify-control"
 
     # Ensure Termux:Widget shortcuts are kept up to date
     SHORTCUTS_DIR="${HOME}/.shortcuts"

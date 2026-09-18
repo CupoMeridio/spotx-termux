@@ -120,22 +120,6 @@ fi
 # Container definitions and storage validation
 CONTAINER_NAME="ubuntu"
 
-is_container_installed() {
-    local name="$1"
-    local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
-    if [ -d "${prefix}/var/lib/proot-distro/containers/${name}" ] || \
-       [ -d "${prefix}/var/lib/proot-distro/installed-rootfs/${name}" ] || \
-       [ -d "/usr/var/lib/proot-distro/containers/${name}" ] || \
-       [ -d "/usr/var/lib/proot-distro/installed-rootfs/${name}" ]; then
-        return 0
-    fi
-    if command -v proot-distro >/dev/null 2>&1; then
-        if proot-distro login "$name" -- true >/dev/null 2>&1; then
-            return 0
-        fi
-    fi
-    return 1
-}
 
 check_disk_space() {
     info "Checking available storage space..."
@@ -282,9 +266,8 @@ fi
 
 REMOTE_REPO_RAW="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/guest-setup.sh"
 
-TMP_DIR="${PREFIX:-/usr}/tmp"
-mkdir -p "$TMP_DIR"
-CONTAINER_SETUP_STAGING="${TMP_DIR}/spotx-guest-setup.sh"
+mkdir -p "$TERMUX_TMP"
+CONTAINER_SETUP_STAGING="${TERMUX_TMP}/spotx-guest-setup.sh"
 
 if [ -n "$GUEST_SETUP_LOCAL" ] && [ -f "$GUEST_SETUP_LOCAL" ]; then
     info "Staging local guest setup script: ${GUEST_SETUP_LOCAL}"
@@ -305,8 +288,7 @@ rm -f "$CONTAINER_SETUP_STAGING"
 # 5. Install launcher scripts on Termux host
 info "Installing launcher scripts on Termux..."
 
-BIN_DIR="${PREFIX:-/data/data/com.termux/files/usr}/bin"
-mkdir -p "$BIN_DIR"
+mkdir -p "$TERMUX_BIN"
 
 # Helper function to install a host script with atomic rename
 install_host_script() {
@@ -336,7 +318,7 @@ install_host_script() {
 install_host_script "start-spotify.sh" "src/start-spotify.sh" "${HOME}/start-spotify.sh"
 
 # Create wrapper in $PREFIX/bin so user can just type 'spotify' anywhere
-COMMAND_BIN="${BIN_DIR}/spotify"
+COMMAND_BIN="${TERMUX_BIN}/spotify"
 cat << 'RUN_CMD' > "$COMMAND_BIN"
 #!/usr/bin/env bash
 exec "$HOME/start-spotify.sh" "$@"
@@ -344,7 +326,7 @@ RUN_CMD
 chmod +x "$COMMAND_BIN"
 
 # Create stop wrapper in $PREFIX/bin so user can just type 'spotify-stop'
-STOP_BIN="${BIN_DIR}/spotify-stop"
+STOP_BIN="${TERMUX_BIN}/spotify-stop"
 cat << 'STOP_CMD' > "$STOP_BIN"
 #!/usr/bin/env bash
 exec "$HOME/start-spotify.sh" --stop "$@"
@@ -353,7 +335,7 @@ chmod +x "$STOP_BIN"
 
 # Install updater script and wrapper
 install_host_script "update-spotify.sh" "src/update-spotify.sh" "${HOME}/update-spotify.sh"
-UPDATE_BIN="${BIN_DIR}/spotify-update"
+UPDATE_BIN="${TERMUX_BIN}/spotify-update"
 cat << 'UPDATE_CMD' > "$UPDATE_BIN"
 #!/usr/bin/env bash
 exec "$HOME/update-spotify.sh" "$@"
@@ -362,7 +344,7 @@ chmod +x "$UPDATE_BIN"
 
 # Install uninstaller script and wrapper
 install_host_script "uninstall.sh" "uninstall.sh" "${HOME}/uninstall-spotify.sh"
-UNINSTALL_BIN="${BIN_DIR}/spotify-uninstall"
+UNINSTALL_BIN="${TERMUX_BIN}/spotify-uninstall"
 cat << 'UNINSTALL_CMD' > "$UNINSTALL_BIN"
 #!/usr/bin/env bash
 exec "$HOME/uninstall-spotify.sh" "$@"
@@ -375,7 +357,7 @@ install_host_script "common.sh" "src/common.sh" "${HOME}/.spotx-termux/common.sh
 
 # Install doctor script and wrapper
 install_host_script "doctor.sh" "src/doctor.sh" "${HOME}/doctor-spotify.sh"
-DOCTOR_BIN="${BIN_DIR}/spotify-doctor"
+DOCTOR_BIN="${TERMUX_BIN}/spotify-doctor"
 cat << 'DOCTOR_CMD' > "$DOCTOR_BIN"
 #!/usr/bin/env bash
 exec "$HOME/doctor-spotify.sh" "$@"
@@ -384,18 +366,13 @@ chmod +x "$DOCTOR_BIN"
 
 # Install media control script and wrapper
 install_host_script "control-spotify.sh" "src/control-spotify.sh" "${HOME}/control-spotify.sh"
-CONTROL_BIN="${BIN_DIR}/spotify-control"
+CONTROL_BIN="${TERMUX_BIN}/spotify-control"
 cat << 'CONTROL_CMD' > "$CONTROL_BIN"
 #!/usr/bin/env bash
 exec "$HOME/control-spotify.sh" "$@"
 CONTROL_CMD
 chmod +x "$CONTROL_BIN"
 
-cat << 'CONTROL_CMD' > "$CONTROL_BIN"
-#!/usr/bin/env bash
-exec "$HOME/control-spotify.sh" "$@"
-CONTROL_CMD
-chmod +x "$CONTROL_BIN"
 
 # Termux:Widget shortcut support (pre-creates ~/.shortcuts directory)
 SHORTCUTS_DIR="${HOME}/.shortcuts"
@@ -403,7 +380,7 @@ ICONS_DIR="${SHORTCUTS_DIR}/icons"
 mkdir -p "$SHORTCUTS_DIR" "$ICONS_DIR"
 
 # Create Spotify shortcut
-cp "$START_SCRIPT_DEST" "${SHORTCUTS_DIR}/Spotify"
+cp "${HOME}/start-spotify.sh" "${SHORTCUTS_DIR}/Spotify"
 chmod +x "${SHORTCUTS_DIR}/Spotify"
 
 # Create Spotify-Stop shortcut

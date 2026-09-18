@@ -39,13 +39,29 @@ else
     warn()    { echo -e "${YELLOW}${BOLD}[! ]${CLR} $*"; }
     error()   { echo -e "${RED}${BOLD}[X ]${CLR} $*" >&2; }
     setup_logging() { :; }
+    TERMUX_BIN="${PREFIX:-/data/data/com.termux/files/usr}/bin"
+    TERMUX_TMP="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}"
+    is_container_installed() {
+        local name="$1"
+        local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
+        if [ -d "${prefix}/var/lib/proot-distro/containers/${name}" ] || \
+           [ -d "${prefix}/var/lib/proot-distro/installed-rootfs/${name}" ] || \
+           [ -d "/usr/var/lib/proot-distro/containers/${name}" ] || \
+           [ -d "/usr/var/lib/proot-distro/installed-rootfs/${name}" ]; then
+            return 0
+        fi
+        if command -v proot-distro >/dev/null 2>&1; then
+            if proot-distro login "$name" -- true >/dev/null 2>&1; then
+                return 0
+            fi
+        fi
+        return 1
+    }
 fi
 WHITE='\033[1;37m'
 
 CONTAINER_NAME="ubuntu"
 PREFIX_DIR="${PREFIX:-/data/data/com.termux/files/usr}"
-BIN_DIR="${PREFIX_DIR}/bin"
-TMP_DIR="${PREFIX_DIR}/tmp"
 SHORTCUTS_DIR="${HOME}/.shortcuts"
 
 # Flags
@@ -147,21 +163,6 @@ confirm_action() {
     esac
 }
 
-is_container_installed() {
-    local name="$1"
-    if [ -d "${PREFIX_DIR}/var/lib/proot-distro/containers/${name}" ] || \
-       [ -d "${PREFIX_DIR}/var/lib/proot-distro/installed-rootfs/${name}" ] || \
-       [ -d "/usr/var/lib/proot-distro/containers/${name}" ] || \
-       [ -d "/usr/var/lib/proot-distro/installed-rootfs/${name}" ]; then
-        return 0
-    fi
-    if command -v proot-distro >/dev/null 2>&1; then
-        if proot-distro login "$name" -- true >/dev/null 2>&1; then
-            return 0
-        fi
-    fi
-    return 1
-}
 
 kill_spotify_processes() {
     info "Terminating active Spotify, audio, and display processes..."
@@ -187,18 +188,18 @@ kill_spotify_processes() {
     pkill -x pulseaudio 2>/dev/null || true
 
     # Clean temporary sockets and lock files
-    rm -rf "${TMP_DIR}/.X11-unix" "${TMP_DIR}/.X0-lock" 2>/dev/null || true
+    rm -rf "${TERMUX_TMP}/.X11-unix" "${TERMUX_TMP}/.X0-lock" 2>/dev/null || true
 }
 
 remove_launchers() {
     info "Removing Termux launchers, wrappers, and shortcuts..."
     local files_to_remove=(
-        "${BIN_DIR}/spotify"
-        "${BIN_DIR}/spotify-stop"
-        "${BIN_DIR}/spotify-control"
-        "${BIN_DIR}/spotify-update"
-        "${BIN_DIR}/spotify-doctor"
-        "${BIN_DIR}/spotify-uninstall"
+        "${TERMUX_BIN}/spotify"
+        "${TERMUX_BIN}/spotify-stop"
+        "${TERMUX_BIN}/spotify-control"
+        "${TERMUX_BIN}/spotify-update"
+        "${TERMUX_BIN}/spotify-doctor"
+        "${TERMUX_BIN}/spotify-uninstall"
         "${HOME}/start-spotify.sh"
         "${HOME}/control-spotify.sh"
         "${HOME}/update-spotify.sh"
@@ -236,7 +237,7 @@ action_clean_cache() {
     fi
 
     # Host temp and log cleanup
-    rm -rf "${TMP_DIR}/.X11-unix" "${TMP_DIR}/.X0-lock" 2>/dev/null || true
+    rm -rf "${TERMUX_TMP}/.X11-unix" "${TERMUX_TMP}/.X0-lock" 2>/dev/null || true
     if [ -d "$LOG_DIR" ]; then
         info "Cleaning old rotated logs in ${LOG_DIR}..."
         rm -f "${LOG_DIR}"/*.old 2>/dev/null || true

@@ -113,10 +113,12 @@ if [ ! -p "$CONTROL_FIFO" ]; then
     exit 1
 fi
 
-# Send action to control FIFO without blocking
-if echo "$DISPATCH" > "$CONTROL_FIFO" 2>/dev/null; then
+# Send action to control FIFO with a 2-second timeout to avoid blocking
+# (termux-notification button-actions run in a separate Android context; if the
+#  bridge reader in the container is not ready, a plain echo would block forever)
+if timeout 2s sh -c "echo \"\$1\" > \"\$2\"" _ "$DISPATCH" "$CONTROL_FIFO" 2>/dev/null; then
     exit 0
 else
-    echo -e "${RED}[X] Failed to send command to SpotX control bridge.${CLR}" >&2
+    echo -e "${RED}[X] Failed to send command to SpotX control bridge (timeout or bridge inactive).${CLR}" >&2
     exit 1
 fi

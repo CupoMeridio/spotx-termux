@@ -19,6 +19,7 @@ ARCH="$(uname -m 2>/dev/null || echo 'unknown')"
 SPOTX_DIR="${HOME}/.spotx-termux"
 LOG_DIR="${SPOTX_DIR}/logs"
 TERMUX_TMP="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}"
+TERMUX_BIN="${PREFIX:-/data/data/com.termux/files/usr}/bin"
 CONTROL_FIFO="${TERMUX_TMP}/spotx-control.fifo"
 MEDIA_FIFO="${TERMUX_TMP}/spotx-media.fifo"
 STATUS_FILE="${TERMUX_TMP}/spotx-media.status"
@@ -123,4 +124,24 @@ notify_user() {
             --priority "high" \
             --icon "$icon" >/dev/null 2>&1 || true
     fi
+}
+
+# ------------------------------------------------------------------------------
+# 7. PRoot Container Helpers
+# ------------------------------------------------------------------------------
+is_container_installed() {
+    local name="$1"
+    local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
+    if [ -d "${prefix}/var/lib/proot-distro/containers/${name}" ] || \
+       [ -d "${prefix}/var/lib/proot-distro/installed-rootfs/${name}" ] || \
+       [ -d "/usr/var/lib/proot-distro/containers/${name}" ] || \
+       [ -d "/usr/var/lib/proot-distro/installed-rootfs/${name}" ]; then
+        return 0
+    fi
+    if command -v proot-distro >/dev/null 2>&1; then
+        if proot-distro login "$name" -- true >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    return 1
 }
