@@ -285,8 +285,12 @@ WIDGET_STOP
         chmod +x "${SHORTCUTS_DIR}/Spotify-Stop" 2>/dev/null || true
     fi
 
-    # Terminate running Spotify and PulseAudio processes to avoid conflicts and reload daemon config
+    # Terminate running Spotify, background media bridge, and PulseAudio processes to avoid conflicts
     pkill -x spotify 2>/dev/null || true
+    pkill -f "spotx-media.fifo" 2>/dev/null || true
+    if command -v termux-notification-remove >/dev/null 2>&1; then
+        termux-notification-remove "spotx-player" 2>/dev/null || true
+    fi
     if command -v pulseaudio >/dev/null 2>&1; then
         pulseaudio -k 2>/dev/null || true
     fi
@@ -322,7 +326,7 @@ proot-distro login "$CONTAINER_NAME" --shared-tmp -- \
 
 if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
     success "Update process finished! Log saved to ${LOG_FILE}"
-    notify_user "SpotX-Termux" "Spotify update and SpotX patch completed successfully!"
+    notify_user "SpotX-Termux" "Spotify update and SpotX patch completed successfully!" "check_circle"
 else
     info "Check completed. Log saved to ${LOG_FILE}"
 fi

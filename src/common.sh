@@ -114,7 +114,7 @@ error()   { echo -e "${RED}${BOLD}[X ]${CLR} $*" >&2; log_msg "ERROR" "$*"; }
 notify_user() {
     local title="$1"
     local content="$2"
-    local icon="${3:-terminal}"
+    local icon="${3:-code}"
     if command -v termux-notification >/dev/null 2>&1; then
         termux-notification \
             --title "$title" \

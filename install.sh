@@ -463,7 +463,7 @@ success "Termux:Widget shortcuts created: 'Spotify' and 'Spotify-Stop'"
 echo "$SPOTX_TERMUX_VERSION" > "${HOME}/.spotx-termux-version"
 
 # Send system notification on completion if termux-api is available
-notify_user "SpotX-Termux" "Installation completed successfully! Launch Spotify with 'spotify'."
+notify_user "SpotX-Termux" "Installation completed successfully! Launch Spotify with 'spotify'." "check_circle"
 
 # 6. Summary and Instructions
 echo
