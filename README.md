@@ -158,8 +158,8 @@ spotify-update
 1. **Container & Environment:** Automatically fetches the latest environment configuration, installs any newly added libraries (`libpci3`, `mesa-vulkan-drivers`, etc.), syncs `/etc/box64.box64rc`, and updates `/usr/local/bin/spotify-termux`.
 2. **Host Launchers:** Refreshes `~/start-spotify.sh`, `~/update-spotify.sh`, `~/uninstall-spotify.sh`, and Termux properties.
 3. **Spotify & SpotX:** Checks your installed version against the latest package in the Spotify APT repository:
-   - If Spotify is up to date, it **skips downloading (~150 MB saved)** and reapplies the latest SpotX patch.
-   - If a new Spotify version is available, it downloads the deb package, verifies SHA256 integrity, unpacks it, and applies SpotX.
+   - If Spotify is up to date and SpotX is already applied, it **skips downloading (~150 MB saved) and skips re-patching**, finishing in seconds. Use `--spotx-only` to force re-applying SpotX rules.
+   - If a new Spotify version is available (or `--force`), it downloads the deb package, verifies SHA256 integrity, unpacks it, and applies SpotX.
 
 > 💡 **Tip:** You can also re-run the main inline installation command at any time (`curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh | bash`). The installer is **completely idempotent**: it detects your existing Ubuntu container without wiping it, skips downloading existing packages, and quickly brings all scripts and configurations up to date in seconds.
 

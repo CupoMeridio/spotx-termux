@@ -57,6 +57,19 @@ read_installed_version() {
     fi
 }
 
+# ---------------------------------------------------------------------------
+# Helper: check if SpotX patch is applied to xpui.spa
+# ---------------------------------------------------------------------------
+is_spotx_applied() {
+    local spa="${1:-/usr/share/spotify/Apps/xpui.spa}"
+    if [ -f "$spa" ] && command -v unzip >/dev/null 2>&1; then
+        if unzip -p "$spa" xpui.js 2>/dev/null | grep -Fq "SpotX"; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # ===========================================================================
 # DOCTOR MODE: print container diagnostics and exit
 # ===========================================================================
@@ -99,10 +112,8 @@ if [ "${SPOTX_DOCTOR:-}" = "1" ] || [ "${1:-}" = "--doctor" ]; then
     read_installed_version
     echo -e "  Installed Version:         ${BOLD}${INSTALLED_VER:-unknown}${CLR}"
     SPOTX_APPLIED="no"
-    if [ -f /usr/share/spotify/Apps/xpui.spa ]; then
-        if unzip -p /usr/share/spotify/Apps/xpui.spa xpui.js 2>/dev/null | grep -Fq "SpotX"; then
-            SPOTX_APPLIED="yes"
-        fi
+    if is_spotx_applied; then
+        SPOTX_APPLIED="yes"
     fi
     echo -e "  SpotX Patch:               ${BOLD}${SPOTX_APPLIED}${CLR}"
 
@@ -137,11 +148,8 @@ if [ "${SPOTX_CHECK_ONLY:-}" = "1" ]; then
     fi
 
     SPOTX_APPLIED="no"
-    if [ -f /usr/share/spotify/Apps/xpui.spa ]; then
-        # Check for SpotX marker inside xpui.spa
-        if unzip -p /usr/share/spotify/Apps/xpui.spa xpui.js 2>/dev/null | grep -Fq "SpotX"; then
-            SPOTX_APPLIED="yes"
-        fi
+    if is_spotx_applied; then
+        SPOTX_APPLIED="yes"
     fi
     echo -e "  SpotX patch applied:       ${BOLD}${SPOTX_APPLIED}${CLR}"
     if [ -n "${SPOTX_TERMUX_LATEST_VERSION:-}" ] && [ -n "${SPOTX_TERMUX_VERSION:-}" ] && [ "${SPOTX_TERMUX_VERSION}" != "unknown" ]; then
@@ -270,6 +278,7 @@ if command -v dbus-uuidgen >/dev/null 2>&1; then
 fi
 
 # 3. Handle architecture-specific Spotify setup
+SPOTIFY_UPDATED=0
 case "$ARCH" in
     x86_64|amd64)
         if [ "${SPOTX_ONLY:-}" = "1" ]; then
@@ -281,11 +290,18 @@ case "$ARCH" in
                 gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/spotify.gpg
             echo "deb https://repository.spotify.com stable non-free" > /etc/apt/sources.list.d/spotify.list
             apt-get update -y
+            read_installed_version
+            OLD_VER="$INSTALLED_VER"
             if [ "${SPOTX_FORCE:-0}" = "1" ]; then
                 info "Force mode enabled: reinstalling spotify-client..."
                 apt-get install --reinstall -y --no-install-recommends spotify-client
+                SPOTIFY_UPDATED=1
             else
                 apt-get install -y --no-install-recommends spotify-client
+                read_installed_version
+                if [ -z "$OLD_VER" ] || [ "$OLD_VER" != "$INSTALLED_VER" ]; then
+                    SPOTIFY_UPDATED=1
+                fi
             fi
             if command -v dpkg-query > /dev/null 2>&1; then
                 mkdir -p "$(dirname "$VERSION_MARKER")"
@@ -341,7 +357,9 @@ case "$ARCH" in
 
             if [ "${SPOTX_FORCE:-0}" != "1" ] && [ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" = "$LATEST_VER" ] && is_valid_elf /usr/share/spotify/spotify; then
                 success "Spotify ${INSTALLED_VER} is already installed, valid ELF binary, and up-to-date. Skipping download."
+                SPOTIFY_UPDATED=0
             else
+                SPOTIFY_UPDATED=1
                 if [ "${SPOTX_FORCE:-0}" = "1" ]; then
                     info "Force mode enabled: re-downloading and re-installing Spotify ${LATEST_VER}..."
                 elif [ -n "$INSTALLED_VER" ]; then
@@ -470,6 +488,9 @@ success "Spotify client successfully installed."
 # 5. Apply SpotX-Bash patch (non-interactive mode)
 if [ "${SPOTX_SKIP:-}" = "1" ]; then
     info "SPOTX_SKIP is set: skipping SpotX patch application."
+elif [ "${SPOTX_ONLY:-0}" != "1" ] && [ "${SPOTX_FORCE:-0}" != "1" ] && [ "$SPOTIFY_UPDATED" = "0" ] && is_spotx_applied; then
+    success "Spotify is up-to-date and SpotX patch is already applied. Skipping patch."
+    info "Use 'spotify-update --spotx-only' or '--force' to re-apply SpotX."
 else
     info "Applying SpotX-Bash patch..."
     SPOTX_SCRIPT_TMP=$(mktemp)
