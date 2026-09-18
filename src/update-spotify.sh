@@ -203,11 +203,13 @@ if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
     termux-reload-settings >/dev/null 2>&1 || true
 
     # Helper function to refresh a host script from local repo or remote GitHub
+    # Uses an atomic rename (mv -f) to prevent self-modifying script buffer corruption
     sync_host_script() {
         local local_rel="$1"
         local remote_rel="$2"
         local dest_file="$3"
         local local_file=""
+        local tmp_file="${dest_file}.tmp.$$"
 
         # Prevent falsely identifying the installed $HOME directory as a local git repository.
         if [ "$SCRIPT_DIR" != "$HOME" ]; then
@@ -219,11 +221,17 @@ if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
         fi
 
         if [ -n "$local_file" ] && [ -f "$local_file" ]; then
-            cp "$local_file" "$dest_file"
+            cp "$local_file" "$tmp_file"
         else
-            curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/${remote_rel}?t=$(date +%s)" -o "$dest_file" 2>/dev/null || true
+            curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/${remote_rel}?t=$(date +%s)" -o "$tmp_file" 2>/dev/null || true
         fi
-        chmod +x "$dest_file" 2>/dev/null || true
+
+        if [ -s "$tmp_file" ]; then
+            chmod +x "$tmp_file" 2>/dev/null || true
+            mv -f "$tmp_file" "$dest_file"
+        else
+            rm -f "$tmp_file" 2>/dev/null || true
+        fi
     }
 
     info "Synchronizing host scripts and configuration..."

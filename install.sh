@@ -308,21 +308,35 @@ info "Installing launcher scripts on Termux..."
 BIN_DIR="${PREFIX:-/data/data/com.termux/files/usr}/bin"
 mkdir -p "$BIN_DIR"
 
-START_SCRIPT_LOCAL=""
-if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/start-spotify.sh" ]; then
-    START_SCRIPT_LOCAL="${SCRIPT_DIR}/src/start-spotify.sh"
-fi
-START_SCRIPT_DEST="${HOME}/start-spotify.sh"
-COMMAND_BIN="${BIN_DIR}/spotify"
+# Helper function to install a host script with atomic rename
+install_host_script() {
+    local local_rel="$1"
+    local remote_rel="$2"
+    local dest_file="$3"
+    local tmp_file="${dest_file}.tmp.$$"
 
-if [ -n "$START_SCRIPT_LOCAL" ] && [ -f "$START_SCRIPT_LOCAL" ]; then
-    cp "$START_SCRIPT_LOCAL" "$START_SCRIPT_DEST"
-else
-    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/start-spotify.sh?t=$(date +%s)" -o "$START_SCRIPT_DEST"
-fi
-chmod +x "$START_SCRIPT_DEST"
+    if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/${local_rel}" ]; then
+        cp "${SCRIPT_DIR}/${local_rel}" "$tmp_file"
+    elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/${local_rel}" ]; then
+        cp "${SCRIPT_DIR}/src/${local_rel}" "$tmp_file"
+    elif [ -n "${_SPOTX_LIB:-}" ] && [ "$local_rel" = "common.sh" ] && [ -f "$_SPOTX_LIB" ]; then
+        cp "$_SPOTX_LIB" "$tmp_file"
+    else
+        curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/${remote_rel}?t=$(date +%s)" -o "$tmp_file" 2>/dev/null || true
+    fi
+
+    if [ -s "$tmp_file" ]; then
+        chmod +x "$tmp_file" 2>/dev/null || true
+        mv -f "$tmp_file" "$dest_file"
+    else
+        rm -f "$tmp_file" 2>/dev/null || true
+    fi
+}
+
+install_host_script "start-spotify.sh" "src/start-spotify.sh" "${HOME}/start-spotify.sh"
 
 # Create wrapper in $PREFIX/bin so user can just type 'spotify' anywhere
+COMMAND_BIN="${BIN_DIR}/spotify"
 cat << 'RUN_CMD' > "$COMMAND_BIN"
 #!/usr/bin/env bash
 exec "$HOME/start-spotify.sh" "$@"
@@ -338,20 +352,8 @@ STOP_CMD
 chmod +x "$STOP_BIN"
 
 # Install updater script and wrapper
-UPDATE_SCRIPT_LOCAL=""
-if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/update-spotify.sh" ]; then
-    UPDATE_SCRIPT_LOCAL="${SCRIPT_DIR}/src/update-spotify.sh"
-fi
-UPDATE_SCRIPT_DEST="${HOME}/update-spotify.sh"
+install_host_script "update-spotify.sh" "src/update-spotify.sh" "${HOME}/update-spotify.sh"
 UPDATE_BIN="${BIN_DIR}/spotify-update"
-
-if [ -n "$UPDATE_SCRIPT_LOCAL" ] && [ -f "$UPDATE_SCRIPT_LOCAL" ]; then
-    cp "$UPDATE_SCRIPT_LOCAL" "$UPDATE_SCRIPT_DEST"
-else
-    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/update-spotify.sh?t=$(date +%s)" -o "$UPDATE_SCRIPT_DEST"
-fi
-chmod +x "$UPDATE_SCRIPT_DEST"
-
 cat << 'UPDATE_CMD' > "$UPDATE_BIN"
 #!/usr/bin/env bash
 exec "$HOME/update-spotify.sh" "$@"
@@ -359,20 +361,8 @@ UPDATE_CMD
 chmod +x "$UPDATE_BIN"
 
 # Install uninstaller script and wrapper
-UNINSTALL_SCRIPT_LOCAL=""
-if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/uninstall.sh" ]; then
-    UNINSTALL_SCRIPT_LOCAL="${SCRIPT_DIR}/uninstall.sh"
-fi
-UNINSTALL_SCRIPT_DEST="${HOME}/uninstall-spotify.sh"
+install_host_script "uninstall.sh" "uninstall.sh" "${HOME}/uninstall-spotify.sh"
 UNINSTALL_BIN="${BIN_DIR}/spotify-uninstall"
-
-if [ -n "$UNINSTALL_SCRIPT_LOCAL" ] && [ -f "$UNINSTALL_SCRIPT_LOCAL" ]; then
-    cp "$UNINSTALL_SCRIPT_LOCAL" "$UNINSTALL_SCRIPT_DEST"
-else
-    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/uninstall.sh?t=$(date +%s)" -o "$UNINSTALL_SCRIPT_DEST"
-fi
-chmod +x "$UNINSTALL_SCRIPT_DEST"
-
 cat << 'UNINSTALL_CMD' > "$UNINSTALL_BIN"
 #!/usr/bin/env bash
 exec "$HOME/uninstall-spotify.sh" "$@"
@@ -381,35 +371,11 @@ chmod +x "$UNINSTALL_BIN"
 
 # Install shared core library to ~/.spotx-termux/common.sh
 mkdir -p "${HOME}/.spotx-termux"
-COMMON_SCRIPT_LOCAL=""
-if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/common.sh" ]; then
-    COMMON_SCRIPT_LOCAL="${SCRIPT_DIR}/src/common.sh"
-fi
-COMMON_SCRIPT_DEST="${HOME}/.spotx-termux/common.sh"
-if [ -n "$COMMON_SCRIPT_LOCAL" ] && [ -f "$COMMON_SCRIPT_LOCAL" ]; then
-    cp "$COMMON_SCRIPT_LOCAL" "$COMMON_SCRIPT_DEST"
-elif [ -n "${_SPOTX_LIB:-}" ] && [ -f "$_SPOTX_LIB" ]; then
-    cp "$_SPOTX_LIB" "$COMMON_SCRIPT_DEST"
-else
-    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/common.sh?t=$(date +%s)" -o "$COMMON_SCRIPT_DEST"
-fi
-chmod +x "$COMMON_SCRIPT_DEST"
+install_host_script "common.sh" "src/common.sh" "${HOME}/.spotx-termux/common.sh"
 
 # Install doctor script and wrapper
-DOCTOR_SCRIPT_LOCAL=""
-if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/doctor.sh" ]; then
-    DOCTOR_SCRIPT_LOCAL="${SCRIPT_DIR}/src/doctor.sh"
-fi
-DOCTOR_SCRIPT_DEST="${HOME}/doctor-spotify.sh"
+install_host_script "doctor.sh" "src/doctor.sh" "${HOME}/doctor-spotify.sh"
 DOCTOR_BIN="${BIN_DIR}/spotify-doctor"
-
-if [ -n "$DOCTOR_SCRIPT_LOCAL" ] && [ -f "$DOCTOR_SCRIPT_LOCAL" ]; then
-    cp "$DOCTOR_SCRIPT_LOCAL" "$DOCTOR_SCRIPT_DEST"
-else
-    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/doctor.sh?t=$(date +%s)" -o "$DOCTOR_SCRIPT_DEST"
-fi
-chmod +x "$DOCTOR_SCRIPT_DEST"
-
 cat << 'DOCTOR_CMD' > "$DOCTOR_BIN"
 #!/usr/bin/env bash
 exec "$HOME/doctor-spotify.sh" "$@"
@@ -417,19 +383,13 @@ DOCTOR_CMD
 chmod +x "$DOCTOR_BIN"
 
 # Install media control script and wrapper
-CONTROL_SCRIPT_LOCAL=""
-if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/control-spotify.sh" ]; then
-    CONTROL_SCRIPT_LOCAL="${SCRIPT_DIR}/src/control-spotify.sh"
-fi
-CONTROL_SCRIPT_DEST="${HOME}/control-spotify.sh"
+install_host_script "control-spotify.sh" "src/control-spotify.sh" "${HOME}/control-spotify.sh"
 CONTROL_BIN="${BIN_DIR}/spotify-control"
-
-if [ -n "$CONTROL_SCRIPT_LOCAL" ] && [ -f "$CONTROL_SCRIPT_LOCAL" ]; then
-    cp "$CONTROL_SCRIPT_LOCAL" "$CONTROL_SCRIPT_DEST"
-else
-    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/control-spotify.sh?t=$(date +%s)" -o "$CONTROL_SCRIPT_DEST"
-fi
-chmod +x "$CONTROL_SCRIPT_DEST"
+cat << 'CONTROL_CMD' > "$CONTROL_BIN"
+#!/usr/bin/env bash
+exec "$HOME/control-spotify.sh" "$@"
+CONTROL_CMD
+chmod +x "$CONTROL_BIN"
 
 cat << 'CONTROL_CMD' > "$CONTROL_BIN"
 #!/usr/bin/env bash
