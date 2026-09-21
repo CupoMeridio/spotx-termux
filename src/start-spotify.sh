@@ -264,10 +264,11 @@ if command -v termux-notification >/dev/null 2>&1; then
                     artist="${artist:-Termux PRoot}"
 
                     local_title="$title"
+                    play_btn="⏸ Pause"
                     if [ "$status" = "Paused" ]; then
                         local_title="[Paused] $title"
+                        play_btn="▶ Play"
                     fi
-
 
                     # Fully qualify the wrapper invocation with HOME explicitly exported 
                     # so that if termux-api drops the HOME env, the wrapper does not fail.
@@ -277,19 +278,20 @@ if command -v termux-notification >/dev/null 2>&1; then
                     else
                         ctrl_bin="${ctrl_bin}\${HOME}/control-spotify.sh"
                     fi
-                    
+
                     termux-notification \
                         --id "spotx-player" \
                         --title "$local_title" \
                         --content "$artist" \
-                        --type media \
-                        --media-previous "${ctrl_bin} previous" \
-                        --media-play "${ctrl_bin} play-pause" \
-                        --media-pause "${ctrl_bin} play-pause" \
-                        --media-next "${ctrl_bin} next" \
                         --icon "audiotrack" \
                         --alert-once \
-                        --priority high >/dev/null 2>&1 || true
+                        --priority max \
+                        --button1 "⏮ Prev" \
+                        --button1-action "${ctrl_bin} previous" \
+                        --button2 "$play_btn" \
+                        --button2-action "${ctrl_bin} play-pause" \
+                        --button3 "⏭ Next" \
+                        --button3-action "${ctrl_bin} next" >/dev/null 2>&1 || true
                 done < "${TERMUX_TMP}/spotx-media.fifo" 2>/dev/null || true
                 sleep 0.2
             done

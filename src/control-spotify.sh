@@ -5,6 +5,9 @@
 # ==============================================================================
 set -euo pipefail
 
+# Ensure PATH is set for Termux API background context
+export PATH="/data/data/com.termux/files/usr/bin:${PATH:-}"
+
 # ------------------------------------------------------------------------------
 # Load SpotX-Termux Shared Library
 # ------------------------------------------------------------------------------
@@ -113,12 +116,14 @@ if [ ! -p "$CONTROL_FIFO" ]; then
     exit 1
 fi
 
-# Send action to control FIFO with a 2-second timeout to avoid blocking
-# (termux-notification button-actions run in a separate Android context; if the
-#  bridge reader in the container is not ready, a plain echo would block forever)
-if timeout 2s sh -c "echo \"\$1\" > \"\$2\"" _ "$DISPATCH" "$CONTROL_FIFO" 2>/dev/null; then
-    exit 0
-else
-    echo -e "${RED}[X] Failed to send command to SpotX control bridge (timeout or bridge inactive).${CLR}" >&2
-    exit 1
-fi
+# Send action to control FIFO without blocking indefinitely
+# We use a subshell with a background echo and a sleep monitor
+(
+    echo "$DISPATCH" > "$CONTROL_FIFO" &
+    PID=$!
+    sleep 2
+    if kill -0 "$PID" 2>/dev/null; then
+        kill -9 "$PID" 2>/dev/null || true
+    fi
+) >/dev/null 2>&1 &
+exit 0
