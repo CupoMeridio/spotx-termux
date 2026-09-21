@@ -281,7 +281,6 @@ if command -v termux-notification >/dev/null 2>&1; then
                         --content "$artist" \
                         --icon "audiotrack" \
                         --alert-once \
-                        --ongoing \
                         --priority max \
                         --button1 "⏮ Prev" \
                         --button1-action "${ctrl_bin} previous" \
