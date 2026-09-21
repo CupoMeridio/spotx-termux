@@ -5,8 +5,9 @@
 # ==============================================================================
 set -euo pipefail
 
-# Ensure PATH is set for Termux API background context
+# Ensure environment variables are set for Termux API background context
 export PATH="/data/data/com.termux/files/usr/bin:${PATH:-}"
+export HOME="${HOME:-/data/data/com.termux/files/home}"
 
 # ------------------------------------------------------------------------------
 # Load SpotX-Termux Shared Library

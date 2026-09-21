@@ -264,20 +264,16 @@ if command -v termux-notification >/dev/null 2>&1; then
                     artist="${artist:-Termux PRoot}"
 
                     local_title="$title"
-                    play_btn="⏸ Pause"
+                    play_btn="❙❙ Pause"
                     if [ "$status" = "Paused" ]; then
                         local_title="[Paused] $title"
                         play_btn="▶ Play"
                     fi
 
-                    # Fully qualify the wrapper invocation with HOME explicitly exported 
-                    # so that if termux-api drops the HOME env, the wrapper does not fail.
-                    ctrl_bin="export HOME=\"\${HOME:-/data/data/com.termux/files/home}\"; "
-                    if [ -x "${PREFIX:-/data/data/com.termux/files/usr}/bin/spotify-control" ]; then
-                        ctrl_bin="${ctrl_bin}${PREFIX:-/data/data/com.termux/files/usr}/bin/spotify-control"
-                    else
-                        ctrl_bin="${ctrl_bin}\${HOME}/control-spotify.sh"
-                    fi
+                    # Resolve the control script path directly so that termux-api can execute it.
+                    # We MUST bypass the $PREFIX/bin wrappers because termux-api drops the $HOME 
+                    # variable, which the wrappers rely on. The target script itself exports it safely.
+                    ctrl_bin="${HOME:-/data/data/com.termux/files/home}/control-spotify.sh"
 
                     termux-notification \
                         --id "spotx-player" \
