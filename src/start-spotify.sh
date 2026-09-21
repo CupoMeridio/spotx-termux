@@ -264,30 +264,38 @@ if command -v termux-notification >/dev/null 2>&1; then
                     artist="${artist:-Termux PRoot}"
 
                     local_title="$title"
-                    play_btn="⏸ Pause"
+                    MEDIA_CMD_FLAG=""
+                    MEDIA_CMD_ACTION=""
+
+                    # Fully qualify the wrapper invocation with HOME explicitly exported 
+                    # so that if termux-api drops the HOME env, the wrapper does not fail.
+                    ctrl_bin="export HOME=\"\${HOME:-/data/data/com.termux/files/home}\"; "
+                    if [ -x "${PREFIX:-/data/data/com.termux/files/usr}/bin/spotify-control" ]; then
+                        ctrl_bin="${ctrl_bin}${PREFIX:-/data/data/com.termux/files/usr}/bin/spotify-control"
+                    else
+                        ctrl_bin="${ctrl_bin}\${HOME}/control-spotify.sh"
+                    fi
+                    
                     if [ "$status" = "Paused" ]; then
                         local_title="[Paused] $title"
-                        play_btn="▶ Play"
-                    fi
-
-                    ctrl_bin="${PREFIX:-/data/data/com.termux/files/usr}/bin/spotify-control"
-                    if [ ! -x "$ctrl_bin" ] && [ -x "${HOME}/control-spotify.sh" ]; then
-                        ctrl_bin="${HOME}/control-spotify.sh"
+                        MEDIA_CMD_FLAG="--media-play"
+                        MEDIA_CMD_ACTION="${ctrl_bin} play-pause"
+                    else
+                        MEDIA_CMD_FLAG="--media-pause"
+                        MEDIA_CMD_ACTION="${ctrl_bin} play-pause"
                     fi
 
                     termux-notification \
                         --id "spotx-player" \
                         --title "$local_title" \
                         --content "$artist" \
+                        --type media \
+                        --media-previous "${ctrl_bin} previous" \
+                        "$MEDIA_CMD_FLAG" "$MEDIA_CMD_ACTION" \
+                        --media-next "${ctrl_bin} next" \
                         --icon "audiotrack" \
                         --alert-once \
-                        --priority high \
-                        --button1 "⏮ Prev" \
-                        --button1-action "${ctrl_bin} previous" \
-                        --button2 "$play_btn" \
-                        --button2-action "${ctrl_bin} play-pause" \
-                        --button3 "⏭ Next" \
-                        --button3-action "${ctrl_bin} next" >/dev/null 2>&1 || true
+                        --priority high >/dev/null 2>&1 || true
                 done < "${TERMUX_TMP}/spotx-media.fifo" 2>/dev/null || true
                 sleep 0.2
             done
