@@ -6,7 +6,9 @@
 set -euo pipefail
 
 # Ensure environment variables are set for Termux API background context
-export PATH="/data/data/com.termux/files/usr/bin:${PATH:-}"
+export PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+export TMPDIR="${TMPDIR:-/data/data/com.termux/files/usr/tmp}"
+export PATH="${PREFIX}/bin:${PATH:-}"
 export HOME="${HOME:-/data/data/com.termux/files/home}"
 
 # ------------------------------------------------------------------------------

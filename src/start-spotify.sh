@@ -264,8 +264,10 @@ if command -v termux-notification >/dev/null 2>&1; then
                     artist="${artist:-Termux PRoot}"
 
                     local_title="$title"
+                    play_btn="❙❙ Pause"
                     if [ "$status" = "Paused" ]; then
                         local_title="[Paused] $title"
+                        play_btn="▶ Play"
                     fi
 
                     # Resolve the control script path directly so that termux-api can execute it.
@@ -273,25 +275,20 @@ if command -v termux-notification >/dev/null 2>&1; then
                     # variable, which the wrappers rely on. The target script itself exports it safely.
                     ctrl_bin="${HOME:-/data/data/com.termux/files/home}/control-spotify.sh"
 
-                    notification_args=(
-                        --id "spotx-player"
-                        --title "$local_title"
-                        --content "$artist"
-                        --icon "audiotrack"
-                        --alert-once
-                        --priority max
-                        --type media
-                        --media-previous "${ctrl_bin} previous"
-                        --media-next "${ctrl_bin} next"
-                    )
-
-                    if [ "$status" = "Paused" ]; then
-                        notification_args+=(--media-play "${ctrl_bin} play-pause")
-                    else
-                        notification_args+=(--media-pause "${ctrl_bin} play-pause")
-                    fi
-
-                    termux-notification "${notification_args[@]}" >/dev/null 2>&1 || true
+                    termux-notification \
+                        --id "spotx-player" \
+                        --title "$local_title" \
+                        --content "$artist" \
+                        --icon "audiotrack" \
+                        --alert-once \
+                        --ongoing \
+                        --priority max \
+                        --button1 "⏮ Prev" \
+                        --button1-action "${ctrl_bin} previous" \
+                        --button2 "$play_btn" \
+                        --button2-action "${ctrl_bin} play-pause" \
+                        --button3 "⏭ Next" \
+                        --button3-action "${ctrl_bin} next" >/dev/null 2>&1 || true
                 done < "${TERMUX_TMP}/spotx-media.fifo" 2>/dev/null || true
                 sleep 0.2
             done
