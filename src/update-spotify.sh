@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
 # update-spotify.sh - Termux host script to update Spotify and SpotX
 # Repository: https://github.com/CupoMeridio/spotx-termux
@@ -227,6 +227,8 @@ if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
     sync_host_script "uninstall.sh" "uninstall.sh" "${HOME}/uninstall-spotify.sh"
     sync_host_script "doctor.sh" "src/doctor.sh" "${HOME}/doctor-spotify.sh"
     sync_host_script "control-spotify.sh" "src/control-spotify.sh" "${HOME}/control-spotify.sh"
+    sed -i '1s|.*|#!/data/data/com.termux/files/usr/bin/bash|' "${HOME}/control-spotify.sh" 2>/dev/null || true
+    chmod +x "${HOME}/control-spotify.sh" 2>/dev/null || true
 
     # Update version marker file from local repo or GitHub remote
     NEW_SPOTX_VER=""
@@ -248,19 +250,19 @@ if [ "$SPOTX_CHECK_ONLY" = "0" ]; then
     # Ensure spotify-stop and spotify-doctor wrappers exist in $BIN_DIR
     mkdir -p "$TERMUX_BIN"
     cat << 'STOP_CMD' > "${TERMUX_BIN}/spotify-stop"
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 exec "$HOME/start-spotify.sh" --stop "$@"
 STOP_CMD
     chmod +x "${TERMUX_BIN}/spotify-stop"
 
     cat << 'DOCTOR_CMD' > "${TERMUX_BIN}/spotify-doctor"
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 exec "$HOME/doctor-spotify.sh" "$@"
 DOCTOR_CMD
     chmod +x "${TERMUX_BIN}/spotify-doctor"
 
     cat << 'CONTROL_CMD' > "${TERMUX_BIN}/spotify-control"
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 exec "$HOME/control-spotify.sh" "$@"
 CONTROL_CMD
     chmod +x "${TERMUX_BIN}/spotify-control"

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
 # control-spotify.sh - Termux host media playback controller for SpotX Spotify
 # Repository: https://github.com/CupoMeridio/spotx-termux

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
 # SpotX-Termux Uninstaller & Cleanup Tool
 # Repository: https://github.com/CupoMeridio/spotx-termux

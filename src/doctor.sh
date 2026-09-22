@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
 # doctor.sh - Diagnostic & Health-Check Utility for SpotX-Termux
 # Repository: https://github.com/CupoMeridio/spotx-termux
@@ -312,6 +312,29 @@ elif [ "$API_PKG_FOUND" = false ] && [ "$API_APP_FOUND" = true ]; then
     record_warn "Termux:API Package Missing" "Run 'pkg install -y termux-api' to enable system notification support."
 else
     echo -e "  ${SYM_INFO} Termux:API Companion:       ${DIM}not installed (optional, needed for Android notifications)${CLR}"
+fi
+
+# Check 2.5: Media Notification Controller Script
+CTRL_SCRIPT="${HOME}/control-spotify.sh"
+if [ -f "$CTRL_SCRIPT" ]; then
+    if [ ! -x "$CTRL_SCRIPT" ]; then
+        echo -e "  ${SYM_FAIL} Media Control Script:      ${RED}not executable${CLR} ${DIM}(~/control-spotify.sh)${CLR}"
+        record_fail "Media Control Not Executable" "Run 'chmod +x ~/control-spotify.sh'"
+    else
+        first_line=$(head -n 1 "$CTRL_SCRIPT" 2>/dev/null || true)
+        if [[ "$first_line" =~ ^#\!/data/data/com\.termux/files/usr/bin/ ]]; then
+            echo -e "  ${SYM_PASS} Media Control Script:      ${GREEN}ready${CLR} ${DIM}(direct Termux shebang)${CLR}"
+            record_pass
+        elif [[ "$first_line" =~ /usr/bin/env ]]; then
+            echo -e "  ${SYM_WARN} Media Control Script:      ${YELLOW}env shebang detected${CLR} ${DIM}(notification tap actions will fail)${CLR}"
+            record_warn "Media Control Shebang" "Run 'sed -i \"1s|.*|#!/data/data/com.termux/files/usr/bin/bash|\" ~/control-spotify.sh'"
+        else
+            echo -e "  ${SYM_PASS} Media Control Script:      ${GREEN}ready${CLR} ${DIM}(~/control-spotify.sh)${CLR}"
+            record_pass
+        fi
+    fi
+else
+    echo -e "  ${SYM_INFO} Media Control Script:      ${DIM}not found in ~/control-spotify.sh${CLR}"
 fi
 
 echo

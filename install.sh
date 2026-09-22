@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 # ==============================================================================
 # SpotX-Termux: Automated installer for Spotify + SpotX on Android via Termux
 # Repository: https://github.com/CupoMeridio/spotx-termux
@@ -320,7 +320,7 @@ install_host_script "start-spotify.sh" "src/start-spotify.sh" "${HOME}/start-spo
 # Create wrapper in $PREFIX/bin so user can just type 'spotify' anywhere
 COMMAND_BIN="${TERMUX_BIN}/spotify"
 cat << 'RUN_CMD' > "$COMMAND_BIN"
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 exec "$HOME/start-spotify.sh" "$@"
 RUN_CMD
 chmod +x "$COMMAND_BIN"
@@ -328,7 +328,7 @@ chmod +x "$COMMAND_BIN"
 # Create stop wrapper in $PREFIX/bin so user can just type 'spotify-stop'
 STOP_BIN="${TERMUX_BIN}/spotify-stop"
 cat << 'STOP_CMD' > "$STOP_BIN"
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 exec "$HOME/start-spotify.sh" --stop "$@"
 STOP_CMD
 chmod +x "$STOP_BIN"
@@ -337,7 +337,7 @@ chmod +x "$STOP_BIN"
 install_host_script "update-spotify.sh" "src/update-spotify.sh" "${HOME}/update-spotify.sh"
 UPDATE_BIN="${TERMUX_BIN}/spotify-update"
 cat << 'UPDATE_CMD' > "$UPDATE_BIN"
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 exec "$HOME/update-spotify.sh" "$@"
 UPDATE_CMD
 chmod +x "$UPDATE_BIN"
@@ -346,7 +346,7 @@ chmod +x "$UPDATE_BIN"
 install_host_script "uninstall.sh" "uninstall.sh" "${HOME}/uninstall-spotify.sh"
 UNINSTALL_BIN="${TERMUX_BIN}/spotify-uninstall"
 cat << 'UNINSTALL_CMD' > "$UNINSTALL_BIN"
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 exec "$HOME/uninstall-spotify.sh" "$@"
 UNINSTALL_CMD
 chmod +x "$UNINSTALL_BIN"
@@ -359,7 +359,7 @@ install_host_script "common.sh" "src/common.sh" "${HOME}/.spotx-termux/common.sh
 install_host_script "doctor.sh" "src/doctor.sh" "${HOME}/doctor-spotify.sh"
 DOCTOR_BIN="${TERMUX_BIN}/spotify-doctor"
 cat << 'DOCTOR_CMD' > "$DOCTOR_BIN"
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 exec "$HOME/doctor-spotify.sh" "$@"
 DOCTOR_CMD
 chmod +x "$DOCTOR_BIN"
@@ -368,7 +368,7 @@ chmod +x "$DOCTOR_BIN"
 install_host_script "control-spotify.sh" "src/control-spotify.sh" "${HOME}/control-spotify.sh"
 CONTROL_BIN="${TERMUX_BIN}/spotify-control"
 cat << 'CONTROL_CMD' > "$CONTROL_BIN"
-#!/usr/bin/env bash
+#!/data/data/com.termux/files/usr/bin/bash
 exec "$HOME/control-spotify.sh" "$@"
 CONTROL_CMD
 chmod +x "$CONTROL_BIN"
