@@ -24,9 +24,9 @@ error()   { echo -e "${RED}${BOLD}[ERROR]${CLR} $*" >&2; }
 
 VERSION_MARKER="/usr/share/spotify/.spotx-termux-version"
 
-echo -e "${CYAN}======================================================${CLR}"
-echo -e "${CYAN}${BOLD}   SpotX Termux - Container Guest Setup (PRoot)       ${CLR}"
-echo -e "${CYAN}======================================================${CLR}"
+echo -e "${CYAN}============================================${CLR}"
+echo -e "${CYAN}${BOLD}   SpotX-Termux - Container Setup (PRoot)   ${CLR}"
+echo -e "${CYAN}============================================${CLR}"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -51,8 +51,16 @@ resolve_latest_spotify() {
 read_installed_version() {
     INSTALLED_VER=""
     if [ -f "$VERSION_MARKER" ]; then
-        INSTALLED_VER=$(cat "$VERSION_MARKER" 2>/dev/null || true)
-    elif command -v dpkg-query > /dev/null 2>&1; then
+        INSTALLED_VER=$(cat "$VERSION_MARKER" 2>/dev/null | tr -d '[:space:]' || true)
+    fi
+    if [ -z "$INSTALLED_VER" ] && [ -f /usr/share/doc/spotify-client/changelog.Debian.gz ]; then
+        INSTALLED_VER=$(zcat /usr/share/doc/spotify-client/changelog.Debian.gz 2>/dev/null | awk '/^spotify-client \(/ { gsub(/[()]/,"",$2); print $2; exit }' || true)
+        if [ -n "$INSTALLED_VER" ]; then
+            mkdir -p "$(dirname "$VERSION_MARKER")" 2>/dev/null || true
+            echo "$INSTALLED_VER" > "$VERSION_MARKER" 2>/dev/null || true
+        fi
+    fi
+    if [ -z "$INSTALLED_VER" ] && command -v dpkg-query > /dev/null 2>&1; then
         INSTALLED_VER=$(dpkg-query -W -f='${Version}' spotify-client 2>/dev/null || true)
     fi
 }
@@ -516,7 +524,7 @@ cat << 'RUNNER' > /usr/local/bin/spotify-termux
 # ==============================================================================
 export DISPLAY="${DISPLAY:-:0}"
 export PULSE_SERVER="${PULSE_SERVER:-tcp:127.0.0.1:4713}"
-export PULSE_LATENCY_MSEC="${PULSE_LATENCY_MSEC:-200}"
+export PULSE_LATENCY_MSEC="${PULSE_LATENCY_MSEC:-500}"
 export LIBGL_ALWAYS_SOFTWARE=1
 export GDK_BACKEND=x11
 

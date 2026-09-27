@@ -115,8 +115,8 @@ PULSE_CONFIG_DIR="${HOME}/.config/pulse"
 mkdir -p "$PULSE_CONFIG_DIR"
 cat << 'PULSE_CONF' > "${PULSE_CONFIG_DIR}/daemon.conf"
 exit-idle-time = -1
-default-fragments = 8
-default-fragment-size-msec = 25
+default-fragments = 12
+default-fragment-size-msec = 40
 resample-method = speex-float-1
 default-sample-rate = 48000
 alternate-sample-rate = 44100

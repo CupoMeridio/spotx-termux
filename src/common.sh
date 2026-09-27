@@ -43,12 +43,15 @@ resolve_spotx_version() {
         fi
     fi
 
-    # Check installed version marker files in $HOME
+    # Check installed version marker files in $HOME and $SPOTX_DIR
     if [ -z "$ver" ] && [ -f "${SPOTX_DIR}/VERSION" ]; then
         ver=$(cat "${SPOTX_DIR}/VERSION" 2>/dev/null | tr -d '[:space:]')
     fi
     if [ -z "$ver" ] && [ -f "${HOME}/.spotx-termux-version" ]; then
         ver=$(cat "${HOME}/.spotx-termux-version" 2>/dev/null | tr -d '[:space:]')
+    fi
+    if [ -z "$ver" ] && [ -f "${TERMUX_TMP}/VERSION" ]; then
+        ver=$(cat "${TERMUX_TMP}/VERSION" 2>/dev/null | tr -d '[:space:]')
     fi
 
     echo "${ver:-unknown}"

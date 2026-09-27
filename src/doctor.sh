@@ -106,22 +106,22 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo -e "${CYAN}======================================================${CLR}"
-echo -e "${CYAN}${BOLD}   SpotX-Termux Doctor - System Diagnostics          ${CLR}"
-echo -e "${CYAN}   Version: ${SPOTX_TERMUX_VERSION}${CLR}"
-echo -e "${CYAN}======================================================${CLR}\n"
+echo -e "${CYAN}============================================${CLR}"
+echo -e "${CYAN}${BOLD}     SpotX-Termux Doctor - Diagnostics      ${CLR}"
+echo -e "${CYAN}     Version: ${SPOTX_TERMUX_VERSION}${CLR}"
+echo -e "${CYAN}============================================${CLR}\n"
 
 # ==============================================================================
 # LAYER 1: Host Environment (Termux)
 # ==============================================================================
-echo -e "${BOLD}[1/4] Checking Termux Host Environment...${CLR}"
+echo -e "${BOLD}[1/4] Checking Termux Host...${CLR}"
 
 # Check 1.1: Termux Detection
 if [ "$IS_TERMUX" = true ]; then
-    echo -e "  ${SYM_PASS} Termux Environment:         ${GREEN}detected${CLR} ${DIM}(${TERMUX_VERSION:-v0.118+})${CLR}"
+    echo -e "  ${SYM_PASS} Termux Env:        ${GREEN}detected${CLR} ${DIM}(${TERMUX_VERSION:-v0.118+})${CLR}"
     record_pass
 else
-    echo -e "  ${SYM_WARN} Termux Environment:         ${YELLOW}non-Termux Linux host${CLR}"
+    echo -e "  ${SYM_WARN} Termux Env:        ${YELLOW}non-Termux host${CLR}"
     record_warn "Non-Termux Host" "Running on standard Linux; Android integrations will be skipped."
 fi
 
@@ -129,15 +129,15 @@ fi
 ARCH="$(uname -m)"
 case "$ARCH" in
     aarch64|arm64)
-        echo -e "  ${SYM_PASS} CPU Architecture:           ${GREEN}${ARCH}${CLR} ${DIM}(ARM64, Box64 translation supported)${CLR}"
+        echo -e "  ${SYM_PASS} Architecture:      ${GREEN}${ARCH}${CLR} ${DIM}(ARM64 Box64)${CLR}"
         record_pass
         ;;
     x86_64|amd64)
-        echo -e "  ${SYM_PASS} CPU Architecture:           ${GREEN}${ARCH}${CLR} ${DIM}(x86_64, native execution supported)${CLR}"
+        echo -e "  ${SYM_PASS} Architecture:      ${GREEN}${ARCH}${CLR} ${DIM}(x86_64 native)${CLR}"
         record_pass
         ;;
     *)
-        echo -e "  ${SYM_FAIL} CPU Architecture:           ${RED}${ARCH} (unsupported)${CLR}"
+        echo -e "  ${SYM_FAIL} Architecture:      ${RED}${ARCH} (unsupported)${CLR}"
         record_fail "Unsupported CPU Architecture" "Spotify Desktop requires 64-bit CPU (aarch64 or x86_64). Architecture '${ARCH}' is not supported."
         ;;
 esac
@@ -153,17 +153,17 @@ if [ -n "$FREE_KB" ] && [ "$FREE_KB" -gt 0 ] 2>/dev/null; then
     FREE_MB=$((FREE_KB / 1024))
     FREE_GB=$((FREE_MB / 1024))
     if [ "$FREE_MB" -gt 2048 ]; then
-        echo -e "  ${SYM_PASS} Available Storage:          ${GREEN}${FREE_GB} GB free${CLR} ${DIM}(>2 GB required)${CLR}"
+        echo -e "  ${SYM_PASS} Storage:           ${GREEN}${FREE_GB} GB free${CLR} ${DIM}(>2 GB req)${CLR}"
         record_pass
     elif [ "$FREE_MB" -gt 1024 ]; then
-        echo -e "  ${SYM_WARN} Available Storage:          ${YELLOW}${FREE_MB} MB free${CLR} ${DIM}(low disk space, >=2 GB recommended)${CLR}"
+        echo -e "  ${SYM_WARN} Storage:           ${YELLOW}${FREE_MB} MB free${CLR} ${DIM}(low space)${CLR}"
         record_warn "Low Disk Space" "Run 'spotify-uninstall --clean-cache' or free up space in Termux."
     else
-        echo -e "  ${SYM_FAIL} Available Storage:          ${RED}${FREE_MB} MB free${CLR} ${DIM}(critical: container setup needs ~2 GB)${CLR}"
+        echo -e "  ${SYM_FAIL} Storage:           ${RED}${FREE_MB} MB free${CLR} ${DIM}(critical)${CLR}"
         record_fail "Critically Low Disk Space" "Free at least 2 GB of internal storage before running or updating Spotify."
     fi
 else
-    echo -e "  ${SYM_INFO} Available Storage:          unable to calculate"
+    echo -e "  ${SYM_INFO} Storage:           unable to calculate"
 fi
 
 # Check 1.4: Required Termux Packages
@@ -176,10 +176,10 @@ for pkg_name in "${REQUIRED_HOST_PKGS[@]}"; do
 done
 
 if [ ${#MISSING_PKGS[@]} -eq 0 ]; then
-    echo -e "  ${SYM_PASS} Required Packages:          ${GREEN}all installed${CLR} ${DIM}(proot-distro, pulseaudio, wget, curl, jq)${CLR}"
+    echo -e "  ${SYM_PASS} Host Packages:     ${GREEN}all installed${CLR} ${DIM}(5/5)${CLR}"
     record_pass
 else
-    echo -e "  ${SYM_FAIL} Required Packages:          ${RED}missing: ${MISSING_PKGS[*]}${CLR}"
+    echo -e "  ${SYM_FAIL} Host Packages:     ${RED}missing: ${MISSING_PKGS[*]}${CLR}"
     record_fail "Missing Host Packages" "Run 'pkg install -y ${MISSING_PKGS[*]}'"
 fi
 
@@ -187,10 +187,10 @@ fi
 TERMUX_PROPS="${HOME}/.termux/termux.properties"
 if [ "$IS_TERMUX" = true ]; then
     if [ -f "$TERMUX_PROPS" ] && grep -q "^[[:space:]]*allow-external-apps[[:space:]]*=[[:space:]]*true" "$TERMUX_PROPS" 2>/dev/null; then
-        echo -e "  ${SYM_PASS} allow-external-apps:        ${GREEN}enabled${CLR} ${DIM}(termux.properties)${CLR}"
+        echo -e "  ${SYM_PASS} allow-external:    ${GREEN}enabled${CLR} ${DIM}(termux.properties)${CLR}"
         record_pass
     else
-        echo -e "  ${SYM_WARN} allow-external-apps:        ${YELLOW}not enabled${CLR} ${DIM}(Termux-X11 app interaction may be blocked)${CLR}"
+        echo -e "  ${SYM_WARN} allow-external:    ${YELLOW}not enabled${CLR} ${DIM}(termux.properties)${CLR}"
         record_warn "allow-external-apps Disabled" "Run 'mkdir -p ~/.termux && echo \"allow-external-apps = true\" >> ~/.termux/termux.properties && termux-reload-settings'"
     fi
 fi
@@ -205,19 +205,19 @@ for cmd in "${SPOTX_COMMANDS[@]}"; do
 done
 
 if [ ${#MISSING_CMDS[@]} -eq 0 ]; then
-    echo -e "  ${SYM_PASS} SpotX Command Wrappers:     ${GREEN}ready${CLR} ${DIM}(spotify, stop, control, update, uninstall, doctor)${CLR}"
+    echo -e "  ${SYM_PASS} CLI Wrappers:      ${GREEN}ready${CLR} ${DIM}(6/6 commands)${CLR}"
     record_pass
 else
-    echo -e "  ${SYM_WARN} SpotX Command Wrappers:     ${YELLOW}missing: ${MISSING_CMDS[*]}${CLR}"
+    echo -e "  ${SYM_WARN} CLI Wrappers:      ${YELLOW}missing: ${MISSING_CMDS[*]}${CLR}"
     record_warn "Missing Command Wrappers" "Re-run 'bash install.sh' to restore wrapper scripts in ${TERMUX_BIN}."
 fi
 
 # Check 1.7: SpotX-Termux Shared Core Library
 if [ -f "${HOME}/.spotx-termux/common.sh" ]; then
-    echo -e "  ${SYM_PASS} Shared Core Library:        ${GREEN}installed${CLR} ${DIM}(~/.spotx-termux/common.sh)${CLR}"
+    echo -e "  ${SYM_PASS} Core Library:      ${GREEN}installed${CLR} ${DIM}(common.sh)${CLR}"
     record_pass
 else
-    echo -e "  ${SYM_WARN} Shared Core Library:        ${YELLOW}missing${CLR}"
+    echo -e "  ${SYM_WARN} Core Library:      ${YELLOW}missing${CLR}"
     record_warn "Missing Core Library" "Run 'spotify-update' to synchronize ~/.spotx-termux/common.sh."
 fi
 
@@ -229,13 +229,13 @@ if [ -d "$LOG_DIR" ]; then
     [ -f "${LOG_DIR}/update.log" ] && FOUND_LOGS+=("update.log")
     [ -f "${LOG_DIR}/uninstall.log" ] && FOUND_LOGS+=("uninstall.log")
     if [ ${#FOUND_LOGS[@]} -gt 0 ]; then
-        echo -e "  ${SYM_PASS} Diagnostics & Logs:        ${GREEN}${LOG_DIR}${CLR} ${DIM}(${FOUND_LOGS[*]})${CLR}"
+        echo -e "  ${SYM_PASS} Diagnostic Logs:   ${GREEN}ready${CLR} ${DIM}(${#FOUND_LOGS[@]} logs found)${CLR}"
         record_pass
     else
-        echo -e "  ${SYM_INFO} Diagnostics & Logs:        ${LOG_DIR} ${DIM}(ready, no logs yet)${CLR}"
+        echo -e "  ${SYM_INFO} Diagnostic Logs:   ${DIM}ready (no logs yet)${CLR}"
     fi
 else
-    echo -e "  ${SYM_INFO} Diagnostics & Logs:        not initialized ${DIM}(created on first run)${CLR}"
+    echo -e "  ${SYM_INFO} Diagnostic Logs:   ${DIM}not initialized${CLR}"
 fi
 
 echo
@@ -243,14 +243,14 @@ echo
 # ==============================================================================
 # LAYER 2: Android & Display Integration
 # ==============================================================================
-echo -e "${BOLD}[2/4] Checking Android & Companion Integration...${CLR}"
+echo -e "${BOLD}[2/4] Checking Android Apps...${CLR}"
 
 # Check 2.1: Termux-X11 Host Package
 if command -v termux-x11 >/dev/null 2>&1; then
-    echo -e "  ${SYM_PASS} Termux-X11 Package:         ${GREEN}installed${CLR} ${DIM}(termux-x11 binary found)${CLR}"
+    echo -e "  ${SYM_PASS} Termux-X11 Pkg:    ${GREEN}installed${CLR}"
     record_pass
 else
-    echo -e "  ${SYM_FAIL} Termux-X11 Package:         ${RED}not found${CLR}"
+    echo -e "  ${SYM_FAIL} Termux-X11 Pkg:    ${RED}not found${CLR}"
     record_fail "Termux-X11 Not Installed" "Run 'pkg install -y x11-repo && pkg install -y termux-x11-nightly'"
 fi
 
@@ -266,10 +266,10 @@ if [ "$IS_TERMUX" = true ]; then
     fi
 
     if [ "$X11_APP_FOUND" = true ]; then
-        echo -e "  ${SYM_PASS} Termux-X11 Android App:     ${GREEN}detected${CLR} ${DIM}(com.termux.x11)${CLR}"
+        echo -e "  ${SYM_PASS} Termux-X11 App:    ${GREEN}detected${CLR} ${DIM}(com.termux.x11)${CLR}"
         record_pass
     else
-        echo -e "  ${SYM_WARN} Termux-X11 Android App:     ${YELLOW}not detected via pm${CLR}"
+        echo -e "  ${SYM_WARN} Termux-X11 App:    ${YELLOW}not detected via pm${CLR}"
         record_warn "Termux-X11 APK Not Detected" "Download and install the APK from https://github.com/termux/termux-x11/releases"
     fi
 fi
@@ -277,10 +277,10 @@ fi
 # Check 2.3: Termux:Widget Shortcuts
 SHORTCUTS_DIR="${HOME}/.shortcuts"
 if [ -f "${SHORTCUTS_DIR}/Spotify" ] && [ -f "${SHORTCUTS_DIR}/Spotify-Stop" ]; then
-    echo -e "  ${SYM_PASS} Termux:Widget Shortcuts:    ${GREEN}configured${CLR} ${DIM}(Spotify, Spotify-Stop)${CLR}"
+    echo -e "  ${SYM_PASS} Widget Shortcuts:  ${GREEN}configured${CLR} ${DIM}(Spotify, Stop)${CLR}"
     record_pass
 else
-    echo -e "  ${SYM_INFO} Termux:Widget Shortcuts:    ${DIM}not found in ~/.shortcuts (optional)${CLR}"
+    echo -e "  ${SYM_INFO} Widget Shortcuts:  ${DIM}not found (optional)${CLR}"
 fi
 
 # Check 2.4: Termux:API Companion & System Notifications
@@ -302,39 +302,39 @@ if [ "$IS_TERMUX" = true ]; then
 fi
 
 if [ "$API_PKG_FOUND" = true ] && [ "$API_APP_FOUND" = true ]; then
-    echo -e "  ${SYM_PASS} Termux:API Companion:       ${GREEN}ready${CLR} ${DIM}(package & com.termux.api APK detected)${CLR}"
+    echo -e "  ${SYM_PASS} Termux:API App:    ${GREEN}ready${CLR} ${DIM}(pkg & APK found)${CLR}"
     record_pass
 elif [ "$API_PKG_FOUND" = true ] && [ "$API_APP_FOUND" = false ]; then
-    echo -e "  ${SYM_WARN} Termux:API Companion:       ${YELLOW}package installed, APK missing${CLR}"
+    echo -e "  ${SYM_WARN} Termux:API App:    ${YELLOW}pkg installed, APK missing${CLR}"
     record_warn "Termux:API APK Not Found" "Install Termux:API app from GitHub/F-Droid to enable Android system notifications."
 elif [ "$API_PKG_FOUND" = false ] && [ "$API_APP_FOUND" = true ]; then
-    echo -e "  ${SYM_WARN} Termux:API Companion:       ${YELLOW}APK detected, CLI package missing${CLR}"
+    echo -e "  ${SYM_WARN} Termux:API App:    ${YELLOW}APK found, pkg missing${CLR}"
     record_warn "Termux:API Package Missing" "Run 'pkg install -y termux-api' to enable system notification support."
 else
-    echo -e "  ${SYM_INFO} Termux:API Companion:       ${DIM}not installed (optional, needed for Android notifications)${CLR}"
+    echo -e "  ${SYM_INFO} Termux:API App:    ${DIM}not installed (optional)${CLR}"
 fi
 
 # Check 2.5: Media Notification Controller Script
 CTRL_SCRIPT="${HOME}/control-spotify.sh"
 if [ -f "$CTRL_SCRIPT" ]; then
     if [ ! -x "$CTRL_SCRIPT" ]; then
-        echo -e "  ${SYM_FAIL} Media Control Script:      ${RED}not executable${CLR} ${DIM}(~/control-spotify.sh)${CLR}"
+        echo -e "  ${SYM_FAIL} Media Controller:  ${RED}not executable${CLR}"
         record_fail "Media Control Not Executable" "Run 'chmod +x ~/control-spotify.sh'"
     else
         first_line=$(head -n 1 "$CTRL_SCRIPT" 2>/dev/null || true)
         if [[ "$first_line" =~ ^#\!/data/data/com\.termux/files/usr/bin/ ]]; then
-            echo -e "  ${SYM_PASS} Media Control Script:      ${GREEN}ready${CLR} ${DIM}(direct Termux shebang)${CLR}"
+            echo -e "  ${SYM_PASS} Media Controller:  ${GREEN}ready${CLR} ${DIM}(direct shebang)${CLR}"
             record_pass
         elif [[ "$first_line" =~ /usr/bin/env ]]; then
-            echo -e "  ${SYM_WARN} Media Control Script:      ${YELLOW}env shebang detected${CLR} ${DIM}(notification tap actions will fail)${CLR}"
+            echo -e "  ${SYM_WARN} Media Controller:  ${YELLOW}env shebang detected${CLR}"
             record_warn "Media Control Shebang" "Run 'sed -i \"1s|.*|#!/data/data/com.termux/files/usr/bin/bash|\" ~/control-spotify.sh'"
         else
-            echo -e "  ${SYM_PASS} Media Control Script:      ${GREEN}ready${CLR} ${DIM}(~/control-spotify.sh)${CLR}"
+            echo -e "  ${SYM_PASS} Media Controller:  ${GREEN}ready${CLR}"
             record_pass
         fi
     fi
 else
-    echo -e "  ${SYM_INFO} Media Control Script:      ${DIM}not found in ~/control-spotify.sh${CLR}"
+    echo -e "  ${SYM_INFO} Media Controller:  ${DIM}not found (optional)${CLR}"
 fi
 
 echo
@@ -342,35 +342,35 @@ echo
 # ==============================================================================
 # LAYER 3: Audio & Display Runtime Services
 # ==============================================================================
-echo -e "${BOLD}[3/4] Checking Audio & Display Runtime Status...${CLR}"
+echo -e "${BOLD}[3/4] Checking Audio & Display...${CLR}"
 
 # Check 3.1: PulseAudio Configuration
 PULSE_CONF="${HOME}/.config/pulse/daemon.conf"
 if [ -f "$PULSE_CONF" ] && grep -q "speex-float-1" "$PULSE_CONF" 2>/dev/null && grep -q "48000" "$PULSE_CONF" 2>/dev/null; then
-    echo -e "  ${SYM_PASS} PulseAudio Config:          ${GREEN}optimized${CLR} ${DIM}(speex-float-1, 48000Hz, OpenSL ES)${CLR}"
+    echo -e "  ${SYM_PASS} PulseAudio Config: ${GREEN}optimized${CLR} ${DIM}(~500ms, 48kHz)${CLR}"
     record_pass
 elif [ -f "$PULSE_CONF" ]; then
-    echo -e "  ${SYM_WARN} PulseAudio Config:          ${YELLOW}present but not tuned${CLR}"
+    echo -e "  ${SYM_WARN} PulseAudio Config: ${YELLOW}present but not tuned${CLR}"
     record_warn "PulseAudio Config Untuned" "Re-run 'bash install.sh' or update ~/.config/pulse/daemon.conf for optimal performance."
 else
-    echo -e "  ${SYM_WARN} PulseAudio Config:          ${YELLOW}default / missing${CLR} ${DIM}(~/.config/pulse/daemon.conf)${CLR}"
+    echo -e "  ${SYM_WARN} PulseAudio Config: ${YELLOW}missing${CLR} ${DIM}(~/.config/pulse)${CLR}"
     record_warn "Missing PulseAudio Config" "Re-run 'bash install.sh' to write recommended audio daemon settings."
 fi
 
 # Check 3.2: PulseAudio Daemon Runtime Status
 if pgrep -x "pulseaudio" >/dev/null 2>&1; then
     PULSE_PID=$(pgrep -x "pulseaudio" | head -1)
-    echo -e "  ${SYM_INFO} PulseAudio Daemon:          ${GREEN}running${CLR} ${DIM}(PID ${PULSE_PID})${CLR}"
+    echo -e "  ${SYM_INFO} PulseAudio Daemon: ${GREEN}running${CLR} ${DIM}(PID ${PULSE_PID})${CLR}"
 else
-    echo -e "  ${SYM_INFO} PulseAudio Daemon:          ${DIM}idle / not running (starts automatically on launch)${CLR}"
+    echo -e "  ${SYM_INFO} PulseAudio Daemon: ${DIM}idle / not running${CLR}"
 fi
 
 # Check 3.3: Termux-X11 Display Server Runtime Status
 TERMUX_TMP="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
 if pgrep -f "termux.x11" >/dev/null 2>&1 || pgrep -f "termux-x11" >/dev/null 2>&1; then
-    echo -e "  ${SYM_INFO} Termux-X11 Server:          ${GREEN}running${CLR} ${DIM}(Display :0 active)${CLR}"
+    echo -e "  ${SYM_INFO} Termux-X11 Server: ${GREEN}running${CLR} ${DIM}(Display :0)${CLR}"
 else
-    echo -e "  ${SYM_INFO} Termux-X11 Server:          ${DIM}idle / not running (starts automatically on launch)${CLR}"
+    echo -e "  ${SYM_INFO} Termux-X11 Server: ${DIM}idle / not running${CLR}"
 fi
 
 echo
@@ -488,102 +488,102 @@ else
     fi
 
     if [ "$GUEST_RESPONSIVE" = "yes" ]; then
-        echo -e "  ${SYM_PASS} Container Login:            ${GREEN}responsive${CLR}"
+        echo -e "  ${SYM_PASS} PRoot Container:   ${GREEN}responsive${CLR} ${DIM}(ubuntu)${CLR}"
         record_pass
     else
-        echo -e "  ${SYM_FAIL} Container Login:            ${RED}failed to login into ${CONTAINER_NAME}${CLR}"
+        echo -e "  ${SYM_FAIL} PRoot Container:   ${RED}login failed (${CONTAINER_NAME})${CLR}"
         record_fail "Container Login Failed" "PRoot container is corrupted or busy. Run 'spotify-uninstall --full' and reinstall."
     fi
 
     # Box64 (on ARM64)
     if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
         if [ -n "$GUEST_BOX64_VER" ]; then
-            echo -e "  ${SYM_PASS} Box64 Translation Layer:   ${GREEN}${GUEST_BOX64_VER}${CLR}"
+            echo -e "  ${SYM_PASS} Box64 Emulator:    ${GREEN}ready${CLR} ${DIM}(ARM64 translation)${CLR}"
             record_pass
         else
-            echo -e "  ${SYM_FAIL} Box64 Translation Layer:   ${RED}box64 not found in container${CLR}"
+            echo -e "  ${SYM_FAIL} Box64 Emulator:    ${RED}missing${CLR}"
             record_fail "Box64 Missing" "Run 'spotify-update' to install or repair Box64 inside Ubuntu."
         fi
 
         if [ "$GUEST_BOX64_GPU" = "0" ]; then
-            echo -e "  ${SYM_PASS} Box64 In-Process GPU:       ${GREEN}disabled${CLR} ${DIM}(BOX64_INPROCESSGPU=0, crash-resistant)${CLR}"
+            echo -e "  ${SYM_PASS} Box64 GPU Config:  ${GREEN}disabled (0)${CLR} ${DIM}(crash-safe)${CLR}"
             record_pass
         else
-            echo -e "  ${SYM_WARN} Box64 In-Process GPU:       ${YELLOW}not configured to 0${CLR}"
+            echo -e "  ${SYM_WARN} Box64 GPU Config:  ${YELLOW}not configured to 0${CLR}"
             record_warn "Box64 In-Process GPU" "Run 'spotify-update' to configure /etc/box64.box64rc"
         fi
     fi
 
     # Window Manager
     if [ "$GUEST_WM" = "matchbox" ]; then
-        echo -e "  ${SYM_PASS} Window Manager:             ${GREEN}matchbox-window-manager${CLR} ${DIM}(auto-fullscreen active)${CLR}"
+        echo -e "  ${SYM_PASS} Window Manager:    ${GREEN}ready${CLR} ${DIM}(matchbox fullscreen)${CLR}"
         record_pass
     elif [ "$GUEST_WM" = "openbox" ]; then
-        echo -e "  ${SYM_PASS} Window Manager:             ${GREEN}openbox${CLR}"
+        echo -e "  ${SYM_PASS} Window Manager:    ${GREEN}ready${CLR} ${DIM}(openbox)${CLR}"
         record_pass
     else
-        echo -e "  ${SYM_WARN} Window Manager:             ${YELLOW}none found${CLR} ${DIM}(Spotify might not auto-fullscreen)${CLR}"
+        echo -e "  ${SYM_WARN} Window Manager:    ${YELLOW}none found${CLR}"
         record_warn "Window Manager Missing" "Run 'proot-distro login ubuntu -- apt-get install -y matchbox-window-manager'"
     fi
 
     # Spotify Binary & ELF integrity
     case "$GUEST_ELF" in
         valid_elf)
-            echo -e "  ${SYM_PASS} Spotify Desktop Binary:     ${GREEN}present and valid ELF${CLR} ${DIM}(/usr/share/spotify/spotify)${CLR}"
+            echo -e "  ${SYM_PASS} Spotify Binary:    ${GREEN}valid ELF${CLR} ${DIM}(x86_64)${CLR}"
             record_pass
             ;;
         missing)
-            echo -e "  ${SYM_FAIL} Spotify Desktop Binary:     ${RED}missing${CLR} ${DIM}(/usr/share/spotify/spotify)${CLR}"
+            echo -e "  ${SYM_FAIL} Spotify Binary:    ${RED}missing${CLR}"
             record_fail "Spotify Binary Missing" "Run 'spotify-update' to download and install Spotify Desktop."
             ;;
         *)
-            echo -e "  ${SYM_FAIL} Spotify Desktop Binary:     ${RED}corrupted or non-ELF file${CLR}"
+            echo -e "  ${SYM_FAIL} Spotify Binary:    ${RED}corrupted or non-ELF${CLR}"
             record_fail "Corrupted Spotify Binary" "Run 'spotify-update' to re-download the clean Spotify package."
             ;;
     esac
 
     # Spotify Version
     if [ -n "$GUEST_VER" ]; then
-        echo -e "  ${SYM_PASS} Installed Spotify Version:  ${GREEN}${GUEST_VER}${CLR}"
+        echo -e "  ${SYM_PASS} Installed Version: ${GREEN}${GUEST_VER}${CLR}"
         record_pass
     else
-        echo -e "  ${SYM_WARN} Installed Spotify Version:  ${YELLOW}unable to determine${CLR}"
+        echo -e "  ${SYM_WARN} Installed Version: ${YELLOW}unable to determine${CLR}"
     fi
 
     # SpotX Patch
     case "$GUEST_SPOTX" in
         applied)
-            echo -e "  ${SYM_PASS} SpotX Patch Status:         ${GREEN}applied [OK]${CLR} ${DIM}(xpui.spa modified)${CLR}"
+            echo -e "  ${SYM_PASS} SpotX Patch:       ${GREEN}applied [OK]${CLR} ${DIM}(xpui.spa)${CLR}"
             record_pass
             ;;
         not_applied)
-            echo -e "  ${SYM_WARN} SpotX Patch Status:         ${YELLOW}stock Spotify (patch not applied)${CLR}"
+            echo -e "  ${SYM_WARN} SpotX Patch:       ${YELLOW}stock (not applied)${CLR}"
             record_warn "SpotX Patch Not Applied" "Run 'spotify-update --spotx-only' to apply SpotX modifications."
             ;;
         missing_xpui)
-            echo -e "  ${SYM_WARN} SpotX Patch Status:         ${YELLOW}xpui.spa not found${CLR}"
+            echo -e "  ${SYM_WARN} SpotX Patch:       ${YELLOW}xpui.spa not found${CLR}"
             record_warn "Missing xpui.spa" "Run 'spotify-update' to reinstall Spotify and apply SpotX."
             ;;
         *)
-            echo -e "  ${SYM_INFO} SpotX Patch Status:         ${DIM}unable to inspect xpui.spa${CLR}"
+            echo -e "  ${SYM_INFO} SpotX Patch:       ${DIM}unable to inspect${CLR}"
             ;;
     esac
 
     # Container Runner
     if [ "$GUEST_RUNNER" = "yes" ]; then
-        echo -e "  ${SYM_PASS} Container Runner:           ${GREEN}ready${CLR} ${DIM}(/usr/local/bin/spotify-termux)${CLR}"
+        echo -e "  ${SYM_PASS} Container Runner:  ${GREEN}ready${CLR} ${DIM}(spotify-termux)${CLR}"
         record_pass
     else
-        echo -e "  ${SYM_FAIL} Container Runner:           ${RED}missing${CLR} ${DIM}(/usr/local/bin/spotify-termux)${CLR}"
+        echo -e "  ${SYM_FAIL} Container Runner:  ${RED}missing${CLR}"
         record_fail "Missing Container Runner" "Run 'spotify-update' to regenerate /usr/local/bin/spotify-termux."
     fi
 
     # MPRIS Media Controls (playerctl)
     if [ "$GUEST_PLAYERCTL" = "yes" ]; then
-        echo -e "  ${SYM_PASS} MPRIS Media Controls:       ${GREEN}playerctl ready${CLR} ${DIM}(notification controls active)${CLR}"
+        echo -e "  ${SYM_PASS} MPRIS Controls:    ${GREEN}ready${CLR} ${DIM}(playerctl bridge)${CLR}"
         record_pass
     else
-        echo -e "  ${SYM_WARN} MPRIS Media Controls:       ${YELLOW}playerctl not installed${CLR} ${DIM}(notification controls unavailable)${CLR}"
+        echo -e "  ${SYM_WARN} MPRIS Controls:    ${YELLOW}playerctl missing${CLR}"
         record_warn "MPRIS Media Controls Missing" "Run 'spotify-update' to install playerctl inside Ubuntu."
     fi
 fi
@@ -594,9 +594,9 @@ echo
 # SUMMARY & ACTIONABLE FIXES
 # ==============================================================================
 TOTAL_CHECKS=$((CHECKS_PASSED + CHECKS_WARNED + CHECKS_FAILED))
-echo -e "${CYAN}======================================================${CLR}"
-echo -e "${CYAN}${BOLD}   Doctor Diagnostic Summary                         ${CLR}"
-echo -e "${CYAN}======================================================${CLR}"
+echo -e "${CYAN}============================================${CLR}"
+echo -e "${CYAN}${BOLD}        Doctor Diagnostic Summary           ${CLR}"
+echo -e "${CYAN}============================================${CLR}"
 echo -e "  Checks Passed:   ${GREEN}${BOLD}${CHECKS_PASSED}${CLR} / ${TOTAL_CHECKS}"
 [ "$CHECKS_WARNED" -gt 0 ] && echo -e "  Warnings:        ${YELLOW}${BOLD}${CHECKS_WARNED}${CLR}"
 [ "$CHECKS_FAILED" -gt 0 ] && echo -e "  Failures:        ${RED}${BOLD}${CHECKS_FAILED}${CLR}"

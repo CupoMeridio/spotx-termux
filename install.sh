@@ -23,6 +23,7 @@ if [ -z "$_SPOTX_LIB" ]; then
     mkdir -p "$TMP_BOOTSTRAP_DIR" 2>/dev/null || true
     _SPOTX_LIB="${TMP_BOOTSTRAP_DIR}/spotx-common.sh"
     curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/common.sh?t=$(date +%s)" -o "$_SPOTX_LIB" 2>/dev/null || true
+    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/VERSION?t=$(date +%s)" -o "${TMP_BOOTSTRAP_DIR}/VERSION" 2>/dev/null || true
 fi
 
 if [ -f "$_SPOTX_LIB" ]; then
@@ -224,8 +225,8 @@ if [ "$IS_TERMUX" = true ]; then
     mkdir -p "${HOME}/.config/pulse"
     cat << 'PULSE_CONF' > "${HOME}/.config/pulse/daemon.conf"
 exit-idle-time = -1
-default-fragments = 8
-default-fragment-size-msec = 25
+default-fragments = 12
+default-fragment-size-msec = 40
 resample-method = speex-float-1
 default-sample-rate = 48000
 alternate-sample-rate = 44100
@@ -397,31 +398,44 @@ cp "${ICONS_DIR}/Spotify.png" "${ICONS_DIR}/Spotify-Stop.png" 2>/dev/null || tru
 success "Termux:Widget shortcuts created: 'Spotify' and 'Spotify-Stop'"
 
 # Save SpotX-Termux version marker for runtime version detection
-echo "$SPOTX_TERMUX_VERSION" > "${HOME}/.spotx-termux-version"
+mkdir -p "$SPOTX_DIR"
+if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/VERSION" ]; then
+    cp "${SCRIPT_DIR}/VERSION" "${SPOTX_DIR}/VERSION" 2>/dev/null || true
+elif [ -n "${TMP_BOOTSTRAP_DIR:-}" ] && [ -f "${TMP_BOOTSTRAP_DIR}/VERSION" ]; then
+    cp "${TMP_BOOTSTRAP_DIR}/VERSION" "${SPOTX_DIR}/VERSION" 2>/dev/null || true
+fi
+
+if [ -z "$SPOTX_TERMUX_VERSION" ] || [ "$SPOTX_TERMUX_VERSION" = "unknown" ]; then
+    SPOTX_TERMUX_VERSION="$(resolve_spotx_version)"
+fi
+echo "${SPOTX_TERMUX_VERSION:-unknown}" > "${HOME}/.spotx-termux-version"
+[ -d "$SPOTX_DIR" ] && echo "${SPOTX_TERMUX_VERSION:-unknown}" > "${SPOTX_DIR}/VERSION" 2>/dev/null || true
 
 # Send system notification on completion if termux-api is available
 notify_user "SpotX-Termux" "Installation completed successfully! Launch Spotify with 'spotify'." "check_circle"
 
 # 6. Summary and Instructions
 echo
-echo -e "${GREEN}${BOLD}======================================================${CLR}"
-echo -e "${GREEN}${BOLD}      Installation Completed Successfully!           ${CLR}"
-echo -e "${GREEN}${BOLD}======================================================${CLR}"
+echo -e "${GREEN}${BOLD}============================================${CLR}"
+echo -e "${GREEN}${BOLD}    Installation Completed Successfully!    ${CLR}"
+echo -e "${GREEN}${BOLD}============================================${CLR}"
 echo
 echo -e "${CYAN}How to manage Spotify SpotX:${CLR}"
-echo -e "  1. Make sure you have installed the ${BOLD}Termux-X11 APK${CLR} on your Android device."
-echo -e "     (Download: https://github.com/termux/termux-x11/releases)"
-echo -e "  2. In Termux, simply type:"
+echo -e "  1. Install ${BOLD}Termux-X11 APK${CLR} on Android"
+echo -e "     (github.com/termux/termux-x11/releases)"
+echo -e "  2. Quick commands in Termux:"
 echo -e "     ${BOLD}${GREEN}spotify${CLR}           - Launch Spotify SpotX"
-echo -e "     ${BOLD}${GREEN}spotify-stop${CLR}      - Stop Spotify and all background processes"
-echo -e "     ${BOLD}${GREEN}spotify-control${CLR}   - Control media playback (play, pause, next, prev)"
-echo -e "     ${BOLD}${GREEN}spotify-update${CLR}    - Update Spotify or re-apply SpotX patch"
-echo -e "     ${BOLD}${GREEN}spotify-doctor${CLR}    - Run health check and diagnostic tool"
-echo -e "     ${BOLD}${GREEN}spotify-uninstall${CLR} - Uninstall or clean up"
-echo -e "  3. Or tap ${BOLD}Spotify${CLR} / ${BOLD}Spotify-Stop${CLR} on your home screen via Termux:Widget."
+echo -e "     ${BOLD}${GREEN}spotify-stop${CLR}      - Stop all processes"
+echo -e "     ${BOLD}${GREEN}spotify-control${CLR}   - Media controls"
+echo -e "     ${BOLD}${GREEN}spotify-update${CLR}    - Update Spotify/SpotX"
+echo -e "     ${BOLD}${GREEN}spotify-doctor${CLR}    - Health check tool"
+echo -e "     ${BOLD}${GREEN}spotify-uninstall${CLR} - Cleanup/uninstall"
+echo -e "  3. Home screen shortcuts via Termux:Widget"
 echo
 echo -e "${YELLOW}Tips for the best experience:${CLR}"
-echo -e "  * Disable Android battery optimization for Termux so audio playback is not paused."
-echo -e "  * In Termux-X11 preferences, enable fullscreen and Touchpad mouse mode."
-echo -e "  * Installation log available at: ${BOLD}${CYAN}${LOG_FILE}${CLR}"
+echo -e "  * Set Battery to 'Unrestricted' for:"
+echo -e "    ${BOLD}Termux${CLR}, ${BOLD}Termux-X11${CLR}, and ${BOLD}Termux:API${CLR}."
+echo -e "  * In Termux-X11 preferences, enable"
+echo -e "    fullscreen and Touchpad mouse mode."
+echo -e "  * Log: ${BOLD}${CYAN}${LOG_FILE}${CLR}"
 echo

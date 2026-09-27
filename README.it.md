@@ -275,8 +275,11 @@ spotx-termux/
 * **Metodo di Login Consigliato (Codice QR):**  
   Al primo accesso a Spotify, **si raccomanda vivamente di utilizzare la procedura con Codice QR**.  
   *Perché:* Il classico pulsante "Accedi" tenta di aprire un browser web desktop di sistema tramite `xdg-open` per completare l'autenticazione OAuth esterna. Poiché all'interno del container minimale PRoot Ubuntu non è presente un browser web grafico, la richiesta fallisce silenziosamente o resta in attesa.
-* **Audio che si interrompe in background:**  
-  Android applica restrizioni aggressive sul risparmio energetico. Vai nelle *Impostazioni Android > App > Termux > Batteria* e imposta **Senza restrizioni**.
+* **Audio che si interrompe o controlli che non rispondono in background:**  
+  Android applica restrizioni aggressive sul risparmio energetico. Escludi tutte e tre le app coinvolte dalle restrizioni della batteria (*Impostazioni Android > App > [Nome App] > Batteria > Senza restrizioni*):
+  - **Termux**: Impedisce la sospensione del demone audio PulseAudio e del motore di riproduzione.
+  - **Termux-X11**: Evita la chiusura forzata o il blocco del socket display X11 quando lo schermo si spegne.
+  - **Termux:API**: Garantisce l'esecuzione istantanea delle azioni (play/pause, brano successivo/precedente) dalla notifica di sistema.
 * **Adattamento a Schermo Intero e Scala Touch (DPI):**  
   Spotify si adatta automaticamente all'intero display del telefono grazie al gestore finestre integrato *Matchbox*. Di default viene applicato un fattore di scala del 150% (`1.5`) per rendere tasti e copertine comodamente utilizzabili con il tocco.  
   Se desideri ingrandire o rimpicciolire l'interfaccia, puoi definire la variabile `SPOTIFY_SCALE` prima del comando (es. `SPOTIFY_SCALE=1.75 spotify`) oppure usare la combinazione rapida **`Ctrl` + `+`** / **`Ctrl` + `-`** direttamente dentro Spotify.

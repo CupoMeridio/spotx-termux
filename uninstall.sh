@@ -71,17 +71,10 @@ SELECTED_ACTION=""
 
 show_banner() {
     setup_logging "uninstall.log"
-    echo -e "${RED}${BOLD}"
-    echo "  ____             _  __  __   _   _       _           _        _ _ "
-    echo " / ___| _ __   ___| |_\ \/ /  | | | |_ __ (_)_ __  ___| |_ __ _| | |"
-    echo " \___ \| '_ \ / _ \ __/\  /___| | | | '_ \| | '_ \/ __| __/ _\` | | |"
-    echo "  ___) | |_) | (_) | |_/  \___| |_| | | | | | | | \__ \ || (_| | | |"
-    echo " |____/| .__/ \___/ \__/_/\_\  \___/|_| |_|_|_| |_|___/\__\__,_|_|_|"
-    echo "       |_|                                                          "
-    echo -e "${CLR}"
-    echo -e "${CYAN}SpotX-Termux - Modular Uninstaller & Cleanup Utility${CLR}"
-    echo -e "${CYAN}Version: ${SPOTX_TERMUX_VERSION}${CLR}"
-    echo -e "${CYAN}----------------------------------------------------${CLR}\n"
+    echo -e "${RED}${BOLD}============================================${CLR}"
+    echo -e "${RED}${BOLD}     SpotX-Termux - Uninstaller Utility     ${CLR}"
+    echo -e "${CYAN}     Version: ${SPOTX_TERMUX_VERSION}${CLR}"
+    echo -e "${RED}${BOLD}============================================${CLR}\n"
 }
 
 show_help() {
@@ -307,9 +300,9 @@ action_remove_spotify_only() {
 }
 
 action_full_uninstall() {
-    echo -e "${RED}${BOLD}======================================================${CLR}"
-    echo -e "${RED}${BOLD}            FULL UNINSTALLATION CONFIRMATION          ${CLR}"
-    echo -e "${RED}${BOLD}======================================================${CLR}"
+    echo -e "${RED}${BOLD}============================================${CLR}"
+    echo -e "${RED}${BOLD}        FULL UNINSTALLATION CONFIRM         ${CLR}"
+    echo -e "${RED}${BOLD}============================================${CLR}"
     warn "This operation will completely remove:"
     echo -e "  - All running Spotify, PulseAudio, and Termux-X11 processes"
     echo -e "  - The entire PRoot container '${BOLD}${CONTAINER_NAME}${CLR}' (~1+ GB of storage freed)"
@@ -368,38 +361,33 @@ action_full_uninstall() {
     fi
 
     echo
-    echo -e "${GREEN}${BOLD}======================================================${CLR}"
-    echo -e "${GREEN}${BOLD}      Full Uninstallation Completed Successfully!     ${CLR}"
-    echo -e "${GREEN}${BOLD}======================================================${CLR}"
+    echo -e "${GREEN}${BOLD}============================================${CLR}"
+    echo -e "${GREEN}${BOLD}    Full Uninstallation Completed!          ${CLR}"
+    echo -e "${GREEN}${BOLD}============================================${CLR}"
     echo -e "${WHITE}All SpotX-Termux files and containers have been removed.${CLR}\n"
 }
 
 show_interactive_menu() {
     show_banner
     echo -e "${WHITE}${BOLD}Select a cleanup option:${CLR}\n"
-    echo -e "  ${GREEN}${BOLD}1)${CLR} ${BOLD}Full Uninstallation${CLR} ${YELLOW}[Recommended to remove everything]${CLR}"
+    echo -e "  ${GREEN}${BOLD}1)${CLR} ${BOLD}Full Uninstallation${CLR} ${YELLOW}[Recommended]${CLR}"
     echo -e "     - Deletes Ubuntu container (~1+ GB freed)"
-    echo -e "     - Removes all commands ('spotify', 'spotify-stop', 'spotify-update', 'spotify-uninstall')"
-    echo -e "     - Removes home screen widget shortcuts ('Spotify', 'Spotify-Stop')"
+    echo -e "     - Removes commands & widget shortcuts"
     echo
-    echo -e "  ${CYAN}${BOLD}2)${CLR} ${BOLD}Remove Spotify & SpotX only${CLR} ${YELLOW}[Preserves Ubuntu container]${CLR}"
-    echo -e "     - Removes Spotify, SpotX, and caches inside container"
-    echo -e "     - Removes Termux launchers"
-    echo -e "     - Keeps the Ubuntu container intact for other uses"
+    echo -e "  ${CYAN}${BOLD}2)${CLR} ${BOLD}Remove Spotify & SpotX only${CLR}"
+    echo -e "     - Removes Spotify, SpotX & caches"
+    echo -e "     - Keeps Ubuntu container intact"
     echo
     echo -e "  ${CYAN}${BOLD}3)${CLR} ${BOLD}Revert SpotX patch only${CLR}"
-    echo -e "     - Reverts Spotify Desktop back to official unmodified stock client"
-    echo -e "     - Keeps Spotify, launchers, and container intact"
+    echo -e "     - Restores unmodified official Spotify"
     echo
     echo -e "  ${CYAN}${BOLD}4)${CLR} ${BOLD}Clean Cache & Temporary Files${CLR}"
-    echo -e "     - Cleans Spotify caches and APT archives to free disk space"
-    echo -e "     - Does NOT uninstall anything"
+    echo -e "     - Frees disk space without uninstalling"
     echo
-    echo -e "  ${CYAN}${BOLD}5)${CLR} ${BOLD}Remove Termux Launchers & Shortcuts only${CLR}"
-    echo -e "     - Removes 'spotify' wrapper commands and widget shortcuts"
-    echo -e "     - Keeps container and Spotify intact"
+    echo -e "  ${CYAN}${BOLD}5)${CLR} ${BOLD}Remove Launchers & Shortcuts only${CLR}"
+    echo -e "     - Removes bin wrappers and widgets"
     echo
-    echo -e "  ${RED}${BOLD}0)${CLR} Cancel / Exit without making any changes"
+    echo -e "  ${RED}${BOLD}0)${CLR} Cancel / Exit without changes"
     echo
 
     local choice=""

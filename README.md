@@ -275,8 +275,11 @@ spotx-termux/
 * **Recommended Login Method (QR Code):**  
   When logging into Spotify for the first time, **strongly prefer the QR Code login option**.  
   *Why:* The standard web-based "Log In" button attempts to launch a desktop web browser via `xdg-open` to complete an external OAuth authentication flow. Because the minimal PRoot Ubuntu container does not have a desktop browser installed, clicking that button will fail silently or hang.
-* **Audio cuts out in background:**  
-  Android applies aggressive battery optimizations. Go to *Android Settings > Apps > Termux > Battery* and set it to **Unrestricted**.
+* **Audio cuts out or controls don't respond in background:**  
+  Android applies aggressive battery optimizations. Exclude all three companion apps from battery restrictions (*Android Settings > Apps > [App Name] > Battery > Unrestricted*):
+  - **Termux**: Prevents the PulseAudio sound daemon and playback engine from being frozen or killed.
+  - **Termux-X11**: Prevents X11 display socket disconnects and GUI freezes when the screen turns off.
+  - **Termux:API**: Ensures media notification action intents (play/pause, next, prev) execute immediately without background delays.
 * **Fullscreen Auto-Fit & Touch Scaling (DPI):**  
   Spotify automatically expands to fill 100% of your device's screen using the integrated *Matchbox* window manager. By default, a 150% UI scale factor (`1.5`) is applied for comfortable fingertip controls.  
   To customize the UI scale, set `SPOTIFY_SCALE` before launching (e.g. `SPOTIFY_SCALE=1.75 spotify`) or press **`Ctrl` + `+`** / **`Ctrl` + `-`** directly inside Spotify.
