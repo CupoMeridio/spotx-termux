@@ -40,28 +40,23 @@ Questo progetto realizza una catena automatizzata per eseguire il client desktop
 ### 1. Prerequisiti su Android
 Prima di avviare l'installazione su Termux, installa le applicazioni necessarie:
 
-- **Obbligatorie:**
-  1. **Termux**: Scarica l'APK da [F-Droid](https://f-droid.org/packages/com.termux/) oppure da [GitHub Releases](https://github.com/termux/termux-app/releases) *(NON usare la versione obsoleta del Google Play Store)*.
-  2. **Termux-X11**: Scarica l'APK companion da [GitHub Releases](https://github.com/termux/termux-x11/releases) (consigliato: `termux-x11-universal-debug.apk`).
+**Obbligatorie:**
 
-- **Facoltativo (consigliato per comodità):**
-  3. **Termux:Widget**: Scarica l'APK da [F-Droid](https://f-droid.org/packages/com.termux.widget/) oppure da [GitHub Releases](https://github.com/termux/termux-widget/releases). Permette di aggiungere una comoda icona/widget sulla home screen dello smartphone per avviare Spotify con un singolo tocco.
-  4. **Termux:API**: Scarica l'APK companion da [F-Droid](https://f-droid.org/packages/com.termux.api/) oppure da [GitHub Releases](https://github.com/termux/termux-api/releases). Abilita le notifiche native di sistema Android (stato di avanzamento/completamento) e i controlli multimediali interattivi nella tendina delle notifiche.  
-     > ⚠️ **Importante**: Devi scaricare i componenti aggiuntivi di Termux (**Termux:Widget** e **Termux:API**) dalla **stessa identica fonte** usata per Termux (entrambi da F-Droid oppure entrambi da GitHub Releases). Se provengono da fonti diverse, Android ne bloccherà l'installazione per incompatibilità della firma crittografica. (Questo vincolo non si applica a Termux-X11, che è un'app indipendente).
+1. **Termux**: Scarica l'APK da [F-Droid](https://f-droid.org/packages/com.termux/) oppure da [GitHub Releases](https://github.com/termux/termux-app/releases) *(NON usare la versione obsoleta del Google Play Store)*.
+2. **Termux-X11**: Scarica l'APK companion da [GitHub Releases](https://github.com/termux/termux-x11/releases) (consigliato: `termux-x11-universal-debug.apk`).
+
+**Facoltativo (consigliato per comodità):**
+
+3. **Termux:Widget**: Scarica l'APK da [F-Droid](https://f-droid.org/packages/com.termux.widget/) oppure da [GitHub Releases](https://github.com/termux/termux-widget/releases). Permette di aggiungere una comoda icona/widget sulla home screen dello smartphone per avviare Spotify con un singolo tocco.
+4. **Termux:API**: Scarica l'APK companion da [F-Droid](https://f-droid.org/packages/com.termux.api/) oppure da [GitHub Releases](https://github.com/termux/termux-api/releases). Abilita le notifiche native di sistema Android (stato di avanzamento/completamento) e i controlli multimediali interattivi nella tendina delle notifiche.
+
+   > ⚠️ **Importante**: Devi scaricare i componenti aggiuntivi di Termux (**Termux:Widget** e **Termux:API**) dalla **stessa identica fonte** usata per Termux (entrambi da F-Droid oppure entrambi da GitHub Releases). Se provengono da fonti diverse, Android ne bloccherà l'installazione per incompatibilità della firma crittografica. (Questo vincolo non si applica a Termux-X11, che è un'app indipendente).
 
 ---
 
 ### 2. Comando di Installazione
-Apri Termux e incolla i seguenti comandi:
+Apri Termux e incolla il seguente comando:
 
-#### Opzione consigliata (scarica, verifica e poi esegui):
-```bash
-curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh -o install.sh
-less install.sh   # Controlla il contenuto dello script
-bash install.sh
-```
-
-#### Esecuzione diretta (one-liner):
 ```bash
 curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh | bash
 ```

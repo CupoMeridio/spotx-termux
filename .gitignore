@@ -2,6 +2,7 @@
 *.tmp
 *.deb
 .DS_Store
+desktop.ini
 
 SpotX-Bash-main
 SpotX-main
