@@ -70,8 +70,13 @@ read_installed_version() {
 # ---------------------------------------------------------------------------
 is_spotx_applied() {
     local spa="${1:-/usr/share/spotify/Apps/xpui.spa}"
+    local app_dir
+    app_dir="$(dirname "$spa" 2>/dev/null || echo '/usr/share/spotify/Apps')"
+    if [ -f "${app_dir}/xpui.bak" ] || [ -f "${app_dir}/xpui.spa.bak" ] || [ -f "/usr/share/spotify/spotify.bak" ]; then
+        return 0
+    fi
     if [ -f "$spa" ] && command -v unzip >/dev/null 2>&1; then
-        if unzip -p "$spa" xpui.js 2>/dev/null | grep -Fq "SpotX"; then
+        if unzip -p "$spa" 2>/dev/null | grep -Fq "SpotX"; then
             return 0
         fi
     fi
@@ -501,17 +506,35 @@ elif [ "${SPOTX_ONLY:-0}" != "1" ] && [ "${SPOTX_FORCE:-0}" != "1" ] && [ "$SPOT
     info "Use 'spotify-update --spotx-only' or '--force' to re-apply SpotX."
 else
     info "Applying SpotX-Bash patch..."
+    read_installed_version
+    SPOTX_CLEAN_VER="${INSTALLED_VER:-${LATEST_VER:-}}"
+    # Strip Debian epoch prefix like '1:' if present
+    SPOTX_CLEAN_VER="${SPOTX_CLEAN_VER#*:}"
+    # Strip git commit suffix like '.g0eeebbed' if present
+    SPOTX_CLEAN_VER="${SPOTX_CLEAN_VER%%.g*}"
+
     SPOTX_SCRIPT_TMP=$(mktemp)
     curl -sSL https://raw.githubusercontent.com/SpotX-Official/SpotX-Bash/main/spotx.sh -o "$SPOTX_SCRIPT_TMP"
-    bash "$SPOTX_SCRIPT_TMP" --noninteractive -f -c -P /usr/share/spotify || {
+
+    SPOTX_ARGS=(--noninteractive -f -c -P /usr/share/spotify)
+    if [ -n "$SPOTX_CLEAN_VER" ]; then
+        SPOTX_ARGS+=(-F "$SPOTX_CLEAN_VER")
+    fi
+
+    # Kill any lingering Spotify processes before patching
+    pkill -9 -f "spotify" 2>/dev/null || true
+
+    # SPOTX_BUILD_MODE=1 prevents complex multi-user stagedInstall/chown/mktemp rollbacks
+    # that fail inside rootless PRoot containers on Android
+    SPOTX_BUILD_MODE=1 bash "$SPOTX_SCRIPT_TMP" "${SPOTX_ARGS[@]}" || {
         warn "SpotX non-interactive script returned non-zero. Checking patched files..."
     }
     rm -f "$SPOTX_SCRIPT_TMP"
 
-    if [ -f /usr/share/spotify/Apps/xpui.spa ]; then
+    if is_spotx_applied; then
         success "SpotX patch successfully applied to xpui.spa!"
     else
-        warn "Spotify xpui.spa not found at standard path. Please check SpotX logs."
+        warn "SpotX patch was not detected in xpui.spa. Spotify will run with stock UI."
     fi
 fi
 

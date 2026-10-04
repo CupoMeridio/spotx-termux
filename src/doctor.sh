@@ -258,7 +258,9 @@ fi
 if [ "$IS_TERMUX" = true ]; then
     X11_APP_FOUND=false
     if command -v pm >/dev/null 2>&1; then
-        if pm list packages com.termux.x11 2>/dev/null | grep -q "com.termux.x11"; then
+        if ( command -v timeout >/dev/null 2>&1 && timeout 1 pm path com.termux.x11 >/dev/null 2>&1 ) || \
+           pm path com.termux.x11 >/dev/null 2>&1 || \
+           pm list packages com.termux.x11 2>/dev/null | grep -q "com.termux.x11"; then
             X11_APP_FOUND=true
         fi
     elif [ -d "/data/data/com.termux.x11" ]; then
@@ -267,6 +269,9 @@ if [ "$IS_TERMUX" = true ]; then
 
     if [ "$X11_APP_FOUND" = true ]; then
         echo -e "  ${SYM_PASS} Termux-X11 App:    ${GREEN}detected${CLR} ${DIM}(com.termux.x11)${CLR}"
+        record_pass
+    elif [ -S "${TERMUX_TMP}/.X11-unix/X0" ] || [ -S "/tmp/.X11-unix/X0" ] || pgrep -f "termux-x11" >/dev/null 2>&1; then
+        echo -e "  ${SYM_PASS} Termux-X11 App:    ${GREEN}active${CLR} ${DIM}(display socket/process running)${CLR}"
         record_pass
     else
         echo -e "  ${SYM_WARN} Termux-X11 App:    ${YELLOW}not detected via pm${CLR}"
@@ -303,26 +308,26 @@ if [ "$IS_TERMUX" = true ]; then
     fi
 fi
 
-if [ "$API_PKG_FOUND" = true ] && [ "$API_APP_FOUND" = true ]; then
-    api_test_ok=true
+if [ "$API_PKG_FOUND" = true ]; then
+    api_test_ok=false
     if command -v timeout >/dev/null 2>&1; then
-        if ! timeout 2 termux-notification --title "SpotX Check" --content "Testing Termux:API..." --id "spotx-diag" --priority low >/dev/null 2>&1; then
-            api_test_ok=false
-        else
+        if timeout 2 termux-notification --title "SpotX Check" --content "Testing Termux:API..." --id "spotx-diag" --priority low >/dev/null 2>&1; then
+            api_test_ok=true
             timeout 2 termux-notification-remove "spotx-diag" >/dev/null 2>&1 || true
         fi
     fi
+
     if [ "$api_test_ok" = true ]; then
         echo -e "  ${SYM_PASS} Termux:API App:    ${GREEN}ready${CLR} ${DIM}(pkg & APK responsive)${CLR}"
         record_pass
-    else
+    elif [ "$API_APP_FOUND" = true ]; then
         echo -e "  ${SYM_WARN} Termux:API App:    ${YELLOW}installed but unresponsive${CLR}"
         record_warn "Termux:API Not Responding" "Grant Notification permission to Termux:API and set Battery to 'Unrestricted' in Android Settings."
+    else
+        echo -e "  ${SYM_WARN} Termux:API App:    ${YELLOW}pkg installed, APK missing or unpermissioned${CLR}"
+        record_warn "Termux:API APK Not Found" "Open Termux:API app once and grant Notification permission in Android Settings."
     fi
-elif [ "$API_PKG_FOUND" = true ] && [ "$API_APP_FOUND" = false ]; then
-    echo -e "  ${SYM_WARN} Termux:API App:    ${YELLOW}pkg installed, APK missing${CLR}"
-    record_warn "Termux:API APK Not Found" "Install Termux:API app from GitHub/F-Droid to enable Android system notifications."
-elif [ "$API_PKG_FOUND" = false ] && [ "$API_APP_FOUND" = true ]; then
+elif [ "$API_APP_FOUND" = true ]; then
     echo -e "  ${SYM_WARN} Termux:API App:    ${YELLOW}APK found, pkg missing${CLR}"
     record_warn "Termux:API Package Missing" "Run 'pkg install -y termux-api' to enable system notification support."
 else
@@ -442,8 +447,12 @@ else
         fi
 
         # Installed Version check
-        if [ -f /root/.spotify-installed-version ]; then
+        if [ -f /usr/share/spotify/.spotx-termux-version ]; then
+            echo "GUEST_VER=$(cat /usr/share/spotify/.spotx-termux-version 2>/dev/null | tr -d "[:space:]")"
+        elif [ -f /root/.spotify-installed-version ]; then
             echo "GUEST_VER=$(cat /root/.spotify-installed-version 2>/dev/null | tr -d "[:space:]")"
+        elif [ -f /usr/share/doc/spotify-client/changelog.Debian.gz ]; then
+            echo "GUEST_VER=$(zcat /usr/share/doc/spotify-client/changelog.Debian.gz 2>/dev/null | awk '/^spotify-client \(/ { gsub(/[()]/,"",$2); print $2; exit }' || true)"
         elif command -v dpkg-query >/dev/null 2>&1; then
             echo "GUEST_VER=$(dpkg-query -W -f='"'"'${Version}'"'"' spotify-client 2>/dev/null | tr -d "[:space:]")"
         else
@@ -451,12 +460,13 @@ else
         fi
 
         # SpotX Patch check
-        if [ -f /usr/share/spotify/Apps/xpui.spa ]; then
-            if unzip -p /usr/share/spotify/Apps/xpui.spa xpui.js 2>/dev/null | grep -Fq "SpotX"; then
-                echo "GUEST_SPOTX=applied"
-            else
-                echo "GUEST_SPOTX=not_applied"
-            fi
+        if [ -f /usr/share/spotify/Apps/xpui.bak ] || \
+           [ -f /usr/share/spotify/Apps/xpui.spa.bak ] || \
+           [ -f /usr/share/spotify/spotify.bak ] || \
+           ( [ -f /usr/share/spotify/Apps/xpui.spa ] && unzip -p /usr/share/spotify/Apps/xpui.spa 2>/dev/null | grep -Fq "SpotX" ); then
+            echo "GUEST_SPOTX=applied"
+        elif [ -f /usr/share/spotify/Apps/xpui.spa ]; then
+            echo "GUEST_SPOTX=not_applied"
         else
             echo "GUEST_SPOTX=missing_xpui"
         fi
