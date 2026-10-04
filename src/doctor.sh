@@ -257,10 +257,19 @@ fi
 # Check 2.2: Termux-X11 Android APK detection
 if [ "$IS_TERMUX" = true ]; then
     X11_APP_FOUND=false
-    if command -v pm >/dev/null 2>&1; then
+    if command -v pm >/dev/null 2>&1 || command -v cmd >/dev/null 2>&1; then
+        # 1. Direct package path query
         if ( command -v timeout >/dev/null 2>&1 && timeout 1 pm path com.termux.x11 >/dev/null 2>&1 ) || \
            pm path com.termux.x11 >/dev/null 2>&1 || \
-           pm list packages com.termux.x11 2>/dev/null | grep -q "com.termux.x11"; then
+           cmd package path com.termux.x11 >/dev/null 2>&1; then
+            X11_APP_FOUND=true
+        # 2. Explicit component intent resolution (exempt from Android 11+ package visibility filters)
+        elif pm resolve-activity -n com.termux.x11/com.termux.x11.MainActivity 2>/dev/null | grep -q "com.termux.x11" || \
+             cmd package resolve-activity --brief -n com.termux.x11/com.termux.x11.MainActivity 2>/dev/null | grep -q "com.termux.x11"; then
+            X11_APP_FOUND=true
+        # 3. Package list or package dump fallback
+        elif pm list packages com.termux.x11 2>/dev/null | grep -q "com.termux.x11" || \
+             pm dump com.termux.x11 2>/dev/null | grep -q "Package \[com.termux.x11\]"; then
             X11_APP_FOUND=true
         fi
     elif [ -d "/data/data/com.termux.x11" ]; then
@@ -272,6 +281,9 @@ if [ "$IS_TERMUX" = true ]; then
         record_pass
     elif [ -S "${TERMUX_TMP}/.X11-unix/X0" ] || [ -S "/tmp/.X11-unix/X0" ] || pgrep -f "termux-x11" >/dev/null 2>&1; then
         echo -e "  ${SYM_PASS} Termux-X11 App:    ${GREEN}active${CLR} ${DIM}(display socket/process running)${CLR}"
+        record_pass
+    elif [ -f "${LOG_DIR}/termux-x11.log" ] && [ -s "${LOG_DIR}/termux-x11.log" ]; then
+        echo -e "  ${SYM_PASS} Termux-X11 App:    ${GREEN}configured${CLR} ${DIM}(verified via session log)${CLR}"
         record_pass
     else
         echo -e "  ${SYM_WARN} Termux-X11 App:    ${YELLOW}not detected via pm${CLR}"
@@ -297,10 +309,16 @@ if command -v termux-notification >/dev/null 2>&1; then
 fi
 
 if [ "$IS_TERMUX" = true ]; then
-    if command -v pm >/dev/null 2>&1; then
+    if command -v pm >/dev/null 2>&1 || command -v cmd >/dev/null 2>&1; then
         if ( command -v timeout >/dev/null 2>&1 && timeout 1 pm path com.termux.api >/dev/null 2>&1 ) || \
            pm path com.termux.api >/dev/null 2>&1 || \
-           pm list packages com.termux.api 2>/dev/null | grep -q "com.termux.api"; then
+           cmd package path com.termux.api >/dev/null 2>&1; then
+            API_APP_FOUND=true
+        elif pm resolve-activity -n com.termux.api/com.termux.api.TermuxApiReceiver 2>/dev/null | grep -q "com.termux.api" || \
+             cmd package resolve-activity --brief -n com.termux.api/com.termux.api.TermuxApiReceiver 2>/dev/null | grep -q "com.termux.api"; then
+            API_APP_FOUND=true
+        elif pm list packages com.termux.api 2>/dev/null | grep -q "com.termux.api" || \
+             pm dump com.termux.api 2>/dev/null | grep -q "Package \[com.termux.api\]"; then
             API_APP_FOUND=true
         fi
     elif [ -d "/data/data/com.termux.api" ]; then
