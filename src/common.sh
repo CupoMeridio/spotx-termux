@@ -115,17 +115,59 @@ error()   { echo -e "${RED}${BOLD}[X ]${CLR} $*" >&2; log_msg "ERROR" "$*"; }
 # ------------------------------------------------------------------------------
 # 6. Android System Notification Helper (via Termux:API)
 # ------------------------------------------------------------------------------
+_TERMUX_API_DETECTED=""
+
+has_termux_api() {
+    [ "${IS_TERMUX:-true}" = true ] || return 1
+    command -v termux-notification >/dev/null 2>&1 || return 1
+
+    # Return cached result if already evaluated in current process
+    if [ -n "$_TERMUX_API_DETECTED" ]; then
+        [ "$_TERMUX_API_DETECTED" = "1" ] && return 0 || return 1
+    fi
+
+    local app_found=false
+    if command -v pm >/dev/null 2>&1; then
+        if ( command -v timeout >/dev/null 2>&1 && timeout 1 pm path com.termux.api >/dev/null 2>&1 ) || \
+           pm path com.termux.api >/dev/null 2>&1 || \
+           pm list packages com.termux.api 2>/dev/null | grep -q "com.termux.api"; then
+            app_found=true
+        fi
+    elif [ -d "/data/data/com.termux.api" ]; then
+        app_found=true
+    fi
+
+    if [ "$app_found" = true ]; then
+        _TERMUX_API_DETECTED="1"
+        return 0
+    else
+        _TERMUX_API_DETECTED="0"
+        return 1
+    fi
+}
+
 notify_user() {
     local title="$1"
     local content="$2"
     local icon="${3:-code}"
-    if command -v termux-notification >/dev/null 2>&1; then
-        termux-notification \
-            --title "$title" \
-            --content "$content" \
-            --id "spotx-status" \
-            --priority "high" \
-            --icon "$icon" >/dev/null 2>&1 || true
+    if has_termux_api; then
+        (
+            if command -v timeout >/dev/null 2>&1; then
+                timeout 2 termux-notification \
+                    --title "$title" \
+                    --content "$content" \
+                    --id "spotx-status" \
+                    --priority "high" \
+                    --icon "$icon" >/dev/null 2>&1 || true
+            else
+                termux-notification \
+                    --title "$title" \
+                    --content "$content" \
+                    --id "spotx-status" \
+                    --priority "high" \
+                    --icon "$icon" >/dev/null 2>&1 || true
+            fi
+        ) &
     fi
 }
 

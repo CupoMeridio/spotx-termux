@@ -520,8 +520,12 @@ fi
 info "[2/3] Preparing PRoot environment and stopping active instances..."
 pkill -x spotify 2>/dev/null || true
 pkill -f "spotx-media.fifo" 2>/dev/null || true
-if command -v termux-notification-remove >/dev/null 2>&1; then
-    termux-notification-remove "spotx-player" 2>/dev/null || true
+if has_termux_api && command -v termux-notification-remove >/dev/null 2>&1; then
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 2 termux-notification-remove "spotx-player" >/dev/null 2>&1 || true
+    else
+        termux-notification-remove "spotx-player" >/dev/null 2>&1 || true
+    fi
 fi
 if command -v pulseaudio >/dev/null 2>&1; then
     pulseaudio -k 2>/dev/null || true

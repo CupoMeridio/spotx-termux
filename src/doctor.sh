@@ -293,7 +293,9 @@ fi
 
 if [ "$IS_TERMUX" = true ]; then
     if command -v pm >/dev/null 2>&1; then
-        if pm list packages com.termux.api 2>/dev/null | grep -q "com.termux.api"; then
+        if ( command -v timeout >/dev/null 2>&1 && timeout 1 pm path com.termux.api >/dev/null 2>&1 ) || \
+           pm path com.termux.api >/dev/null 2>&1 || \
+           pm list packages com.termux.api 2>/dev/null | grep -q "com.termux.api"; then
             API_APP_FOUND=true
         fi
     elif [ -d "/data/data/com.termux.api" ]; then
@@ -302,8 +304,21 @@ if [ "$IS_TERMUX" = true ]; then
 fi
 
 if [ "$API_PKG_FOUND" = true ] && [ "$API_APP_FOUND" = true ]; then
-    echo -e "  ${SYM_PASS} Termux:API App:    ${GREEN}ready${CLR} ${DIM}(pkg & APK found)${CLR}"
-    record_pass
+    api_test_ok=true
+    if command -v timeout >/dev/null 2>&1; then
+        if ! timeout 2 termux-notification --title "SpotX Check" --content "Testing Termux:API..." --id "spotx-diag" --priority low >/dev/null 2>&1; then
+            api_test_ok=false
+        else
+            timeout 2 termux-notification-remove "spotx-diag" >/dev/null 2>&1 || true
+        fi
+    fi
+    if [ "$api_test_ok" = true ]; then
+        echo -e "  ${SYM_PASS} Termux:API App:    ${GREEN}ready${CLR} ${DIM}(pkg & APK responsive)${CLR}"
+        record_pass
+    else
+        echo -e "  ${SYM_WARN} Termux:API App:    ${YELLOW}installed but unresponsive${CLR}"
+        record_warn "Termux:API Not Responding" "Grant Notification permission to Termux:API and set Battery to 'Unrestricted' in Android Settings."
+    fi
 elif [ "$API_PKG_FOUND" = true ] && [ "$API_APP_FOUND" = false ]; then
     echo -e "  ${SYM_WARN} Termux:API App:    ${YELLOW}pkg installed, APK missing${CLR}"
     record_warn "Termux:API APK Not Found" "Install Termux:API app from GitHub/F-Droid to enable Android system notifications."

@@ -184,8 +184,14 @@ cleanup() {
     echo -e "\n${YELLOW}[*] Shutting down SpotX Spotify and background services...${CLR}"
 
     # Remove Android media notification first (before killing the bridge)
-    if command -v termux-notification-remove >/dev/null 2>&1; then
-        termux-notification-remove "spotx-player" 2>/dev/null || true
+    if has_termux_api && command -v termux-notification-remove >/dev/null 2>&1; then
+        (
+            if command -v timeout >/dev/null 2>&1; then
+                timeout 2 termux-notification-remove "spotx-player" >/dev/null 2>&1 || true
+            else
+                termux-notification-remove "spotx-player" >/dev/null 2>&1 || true
+            fi
+        ) &
     fi
 
     # Stop Android notification media bridge
@@ -237,13 +243,17 @@ cleanup() {
 # Trap signals: Ctrl+C (INT), SIGTERM (TERM), SIGHUP (HUP), and normal script exit (EXIT)
 trap cleanup EXIT INT TERM HUP
 
-# 5. Start Android Media Notification Bridge if termux-notification is available
+# 5. Start Android Media Notification Bridge if Termux:API is available
 NOTIFY_BRIDGE_PID=""
-if command -v termux-notification >/dev/null 2>&1; then
+if has_termux_api && command -v termux-notification >/dev/null 2>&1; then
     # Cleanup any orphan notification left by a previous session killed with SIGKILL
     # (trap cleanup is not called on SIGKILL, so we clean up proactively here)
     if command -v termux-notification-remove >/dev/null 2>&1; then
-        termux-notification-remove "spotx-player" 2>/dev/null || true
+        if command -v timeout >/dev/null 2>&1; then
+            timeout 2 termux-notification-remove "spotx-player" >/dev/null 2>&1 || true
+        else
+            termux-notification-remove "spotx-player" 2>/dev/null || true
+        fi
     fi
 
     mkdir -p "${TERMUX_TMP}"
@@ -275,19 +285,35 @@ if command -v termux-notification >/dev/null 2>&1; then
                     # variable, which the wrappers rely on. The target script itself exports it safely.
                     ctrl_bin="${HOME:-/data/data/com.termux/files/home}/control-spotify.sh"
 
-                    termux-notification \
-                        --id "spotx-player" \
-                        --title "$local_title" \
-                        --content "$artist" \
-                        --icon "audiotrack" \
-                        --alert-once \
-                        --priority max \
-                        --button1 "⏮ Prev" \
-                        --button1-action "${ctrl_bin} previous" \
-                        --button2 "$play_btn" \
-                        --button2-action "${ctrl_bin} play-pause" \
-                        --button3 "⏭ Next" \
-                        --button3-action "${ctrl_bin} next" >/dev/null 2>&1 || true
+                    if command -v timeout >/dev/null 2>&1; then
+                        timeout 2 termux-notification \
+                            --id "spotx-player" \
+                            --title "$local_title" \
+                            --content "$artist" \
+                            --icon "audiotrack" \
+                            --alert-once \
+                            --priority max \
+                            --button1 "⏮ Prev" \
+                            --button1-action "${ctrl_bin} previous" \
+                            --button2 "$play_btn" \
+                            --button2-action "${ctrl_bin} play-pause" \
+                            --button3 "⏭ Next" \
+                            --button3-action "${ctrl_bin} next" >/dev/null 2>&1 || true
+                    else
+                        termux-notification \
+                            --id "spotx-player" \
+                            --title "$local_title" \
+                            --content "$artist" \
+                            --icon "audiotrack" \
+                            --alert-once \
+                            --priority max \
+                            --button1 "⏮ Prev" \
+                            --button1-action "${ctrl_bin} previous" \
+                            --button2 "$play_btn" \
+                            --button2-action "${ctrl_bin} play-pause" \
+                            --button3 "⏭ Next" \
+                            --button3-action "${ctrl_bin} next" >/dev/null 2>&1 || true
+                    fi
                 done < "${TERMUX_TMP}/spotx-media.fifo" 2>/dev/null || true
                 sleep 0.2
             done
