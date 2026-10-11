@@ -340,7 +340,7 @@ if [ "$API_PKG_FOUND" = true ]; then
         record_pass
     elif [ "$API_APP_FOUND" = true ]; then
         echo -e "  ${SYM_WARN} Termux:API App:    ${YELLOW}installed but unresponsive${CLR}"
-        record_warn "Termux:API Not Responding" "Grant Notification permission to Termux:API and set Battery to 'Unrestricted' in Android Settings."
+        record_warn "Termux:API Not Responding" "Open Termux:API once, grant Notification permission, allow Auto-start / Associated launch, and set Battery to 'Unrestricted' in Android Settings."
     else
         echo -e "  ${SYM_WARN} Termux:API App:    ${YELLOW}pkg installed, APK missing or unpermissioned${CLR}"
         record_warn "Termux:API APK Not Found" "Open Termux:API app once and grant Notification permission in Android Settings."
@@ -458,7 +458,7 @@ else
         # Spotify ELF check
         if [ ! -f /usr/share/spotify/spotify ]; then
             echo "GUEST_ELF=missing"
-        elif [ "$(head -c 4 /usr/share/spotify/spotify 2>/dev/null)" = $'"'"'\x7fELF'"'"' ]; then
+        elif head -c 4 /usr/share/spotify/spotify 2>/dev/null | grep -q "ELF"; then
             echo "GUEST_ELF=valid_elf"
         else
             echo "GUEST_ELF=corrupted"
@@ -470,9 +470,11 @@ else
         elif [ -f /root/.spotify-installed-version ]; then
             echo "GUEST_VER=$(cat /root/.spotify-installed-version 2>/dev/null | tr -d "[:space:]")"
         elif [ -f /usr/share/doc/spotify-client/changelog.Debian.gz ]; then
-            echo "GUEST_VER=$(zcat /usr/share/doc/spotify-client/changelog.Debian.gz 2>/dev/null | awk '/^spotify-client \(/ { gsub(/[()]/,"",$2); print $2; exit }' || true)"
+            echo "GUEST_VER=$(zcat /usr/share/doc/spotify-client/changelog.Debian.gz 2>/dev/null | grep -m1 "^spotify-client" | cut -d"(" -f2 | cut -d")" -f1 || true)"
         elif command -v dpkg-query >/dev/null 2>&1; then
-            echo "GUEST_VER=$(dpkg-query -W -f='"'"'${Version}'"'"' spotify-client 2>/dev/null | tr -d "[:space:]")"
+            echo "GUEST_VER=$(dpkg-query -W -f="\${Version}" spotify-client 2>/dev/null | tr -d "[:space:]")"
+        elif command -v dpkg >/dev/null 2>&1; then
+            echo "GUEST_VER=$(dpkg -s spotify-client 2>/dev/null | grep -m1 "^Version:" | cut -d" " -f2 | tr -d "[:space:]" || true)"
         else
             echo "GUEST_VER="
         fi
