@@ -6,59 +6,60 @@
 set -euo pipefail
 
 # ------------------------------------------------------------------------------
-# Load SpotX-Termux Shared Library (local repo, temporary cache, or remote fetch)
+# Load SpotX-Termux Shared Library (local repo checkout, or remote bootstrap copy
+# when run as 'curl ... | bash')
 # ------------------------------------------------------------------------------
 _SPOTX_LIB=""
-SCRIPT_DIR=""
 if [ -n "${BASH_SOURCE[0]:-}" ]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
-    if [ -f "${SCRIPT_DIR}/src/common.sh" ]; then
-        _SPOTX_LIB="${SCRIPT_DIR}/src/common.sh"
-    elif [ -f "${SCRIPT_DIR}/common.sh" ]; then
-        _SPOTX_LIB="${SCRIPT_DIR}/common.sh"
+    _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+    if [ -f "${_script_dir}/src/common.sh" ]; then
+        _SPOTX_LIB="${_script_dir}/src/common.sh"
     fi
 fi
 if [ -z "$_SPOTX_LIB" ]; then
-    TMP_BOOTSTRAP_DIR="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
-    mkdir -p "$TMP_BOOTSTRAP_DIR" 2>/dev/null || true
-    _SPOTX_LIB="${TMP_BOOTSTRAP_DIR}/spotx-common.sh"
-    rm -f "$_SPOTX_LIB" "${TMP_BOOTSTRAP_DIR}/VERSION" 2>/dev/null || true
+    _bootstrap_dir="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
+    _bootstrap_raw="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main"
+    mkdir -p "$_bootstrap_dir" 2>/dev/null || true
+    _SPOTX_LIB="${_bootstrap_dir}/spotx-common.sh"
+    rm -f "$_SPOTX_LIB" "${_bootstrap_dir}/VERSION" 2>/dev/null || true
     # -f: never save an HTTP error page as the library. Validation can't use common.sh yet.
-    if ! curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/common.sh?t=$(date +%s)" -o "$_SPOTX_LIB" 2>/dev/null \
+    if ! curl -fsSL "${_bootstrap_raw}/src/common.sh?t=$(date +%s)" -o "$_SPOTX_LIB" 2>/dev/null \
         || [ "$(head -c 2 "$_SPOTX_LIB" 2>/dev/null)" != "#!" ]; then
         rm -f "$_SPOTX_LIB" 2>/dev/null || true
     fi
-    curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/VERSION?t=$(date +%s)" -o "${TMP_BOOTSTRAP_DIR}/VERSION" 2>/dev/null \
-        || rm -f "${TMP_BOOTSTRAP_DIR}/VERSION" 2>/dev/null || true
+    # VERSION next to the bootstrap library is what resolve_spotx_version reads first
+    curl -fsSL "${_bootstrap_raw}/VERSION?t=$(date +%s)" -o "${_bootstrap_dir}/VERSION" 2>/dev/null \
+        || rm -f "${_bootstrap_dir}/VERSION" 2>/dev/null || true
 fi
 
 if [ -f "$_SPOTX_LIB" ]; then
     # shellcheck source=/dev/null
     source "$_SPOTX_LIB"
 else
-    echo "[X] Error: Could not load SpotX-Termux core library." >&2
+    echo "[X] Error: Could not load SpotX-Termux core library (network or GitHub error)." >&2
     exit 1
 fi
 
-# Delegate to uninstaller if requested
+# ------------------------------------------------------------------------------
+# Sub-command delegation & informational flags
+# ------------------------------------------------------------------------------
 if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "-u" ]; then
     shift
-    if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/uninstall.sh" ]; then
-        exec bash "${SCRIPT_DIR}/uninstall.sh" "$@"
+    if [ -n "$SPOTX_REPO_ROOT" ]; then
+        exec bash "${SPOTX_REPO_ROOT}/uninstall.sh" "$@"
     else
-        exec bash <(curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/uninstall.sh?t=$(date +%s)") "$@"
+        exec bash <(curl -fsSL "${SPOTX_REPO_RAW}/uninstall.sh?t=$(date +%s)") "$@"
     fi
 fi
 
-# Delegate to doctor if requested
 if [ "${1:-}" = "--doctor" ] || [ "${1:-}" = "-d" ] || [ "${1:-}" = "doctor" ]; then
     shift
-    if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/doctor.sh" ]; then
-        exec bash "${SCRIPT_DIR}/src/doctor.sh" "$@"
+    if [ -n "$SPOTX_REPO_ROOT" ]; then
+        exec bash "${SPOTX_REPO_ROOT}/src/doctor.sh" "$@"
     elif [ -f "${HOME}/doctor-spotify.sh" ]; then
         exec "$HOME/doctor-spotify.sh" "$@"
     else
-        exec bash -c "$(curl -fsSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/doctor.sh)" bash "$@"
+        exec bash -c "$(curl -fsSL "${SPOTX_REPO_RAW}/src/doctor.sh")" bash "$@"
     fi
 fi
 
@@ -106,13 +107,16 @@ echo -e "${CYAN}Automatic setup of Spotify Desktop + SpotX inside Termux PRoot${
 echo -e "${CYAN}Version: ${BOLD}${SPOTX_TERMUX_VERSION}${CLR}"
 echo -e "${CYAN}---------------------------------------------------------------${CLR}\n"
 
-# 1. Environment check
+# ------------------------------------------------------------------------------
+# 1. Environment & storage checks
+# ------------------------------------------------------------------------------
 info "Detected architecture: ${ARCH}"
 
 if [ "$IS_TERMUX" = false ]; then
     warn "This installer is designed for Termux on Android."
     warn "You are currently running on a standard Linux host (${ARCH})."
-    read -rp "Do you want to proceed with a dry-run / container test? [y/N]: " RESP
+    RESP=""
+    prompt_tty "Do you want to proceed with a dry-run / container test? [y/N]: " RESP "N"
     case "$RESP" in
         [yY]|[yY][eE][sS])
             info "Proceeding..."
@@ -123,10 +127,6 @@ if [ "$IS_TERMUX" = false ]; then
             ;;
     esac
 fi
-
-# Container definitions and storage validation
-CONTAINER_NAME="ubuntu"
-
 
 check_disk_space() {
     info "Checking available storage space..."
@@ -166,13 +166,10 @@ check_disk_space() {
             warn "Low storage space: only ${free_mb} MB free."
             warn "SpotX-Termux installation requires ~1.2 GB of temporary extraction space."
             warn "Audio and Spotify cache will require additional storage."
-            local resp=""
-            if [ -t 0 ]; then
-                read -rp "Do you want to proceed anyway? [y/N]: " resp
-            elif [ -e /dev/tty ]; then
-                read -rp "Do you want to proceed anyway? [y/N]: " resp < /dev/tty
-            else
-                resp="y"
+            # Interactive: an empty answer aborts. Unattended (no terminal): proceed.
+            local resp="y"
+            if has_tty; then
+                prompt_tty "Do you want to proceed anyway? [y/N]: " resp "N"
             fi
             case "$resp" in
                 [yY]|[yY][eE][sS])
@@ -196,8 +193,9 @@ check_disk_space() {
 
 check_disk_space
 
-
-# 2. Update Termux repositories and install host dependencies
+# ------------------------------------------------------------------------------
+# 2. Termux repositories, host dependencies and host configuration
+# ------------------------------------------------------------------------------
 if [ "$IS_TERMUX" = true ]; then
     info "Enabling Termux X11 repository..."
     pkg install -y x11-repo || {
@@ -209,8 +207,12 @@ if [ "$IS_TERMUX" = true ]; then
         warn "pkg update returned a warning. Continuing..."
     }
 
-    info "Installing required Termux packages (proot-distro, pulseaudio, termux-api, etc.)..."
-    pkg install -y proot-distro pulseaudio wget curl jq termux-api
+    HOST_PKGS=()
+    for entry in "${SPOTX_CORE_PKGS[@]}" "${SPOTX_OPTIONAL_PKGS[@]}"; do
+        HOST_PKGS+=("${entry%%|*}")
+    done
+    info "Installing required Termux packages (${HOST_PKGS[*]})..."
+    pkg install -y "${HOST_PKGS[@]}"
 
     info "Installing Termux-X11 companion package..."
     pkg install -y termux-x11-nightly || {
@@ -218,31 +220,13 @@ if [ "$IS_TERMUX" = true ]; then
         warn "Please ensure x11-repo is enabled or install termux-x11 companion manually."
     }
 
-    # Ensure Termux allows external apps (required for Termux-X11 interaction)
-    mkdir -p "${HOME}/.termux"
-    if grep -q "^[[:space:]]*allow-external-apps" "${HOME}/.termux/termux.properties" 2>/dev/null; then
-        sed -i 's/^[[:space:]]*allow-external-apps[[:space:]]*=.*/allow-external-apps = true/' "${HOME}/.termux/termux.properties"
-    else
-        echo "allow-external-apps = true" >> "${HOME}/.termux/termux.properties"
-    fi
-    termux-reload-settings >/dev/null 2>&1 || true
-
-    # Pre-configure PulseAudio daemon settings for optimal Android latency and CPU performance
-    mkdir -p "${HOME}/.config/pulse"
-    cat << 'PULSE_CONF' > "${HOME}/.config/pulse/daemon.conf"
-exit-idle-time = -1
-default-fragments = 12
-default-fragment-size-msec = 40
-resample-method = speex-float-1
-default-sample-rate = 48000
-alternate-sample-rate = 44100
-default-sample-channels = 2
-high-priority = yes
-realtime-scheduling = no
-PULSE_CONF
+    ensure_allow_external_apps
+    write_pulse_config
 fi
 
-# 3. Setup Ubuntu container via proot-distro
+# ------------------------------------------------------------------------------
+# 3. Ubuntu container via proot-distro
+# ------------------------------------------------------------------------------
 info "Checking PRoot container '${CONTAINER_NAME}'..."
 if is_container_installed "$CONTAINER_NAME"; then
     success "Container '${CONTAINER_NAME}' already installed."
@@ -263,31 +247,17 @@ else
     fi
 fi
 
-# 4. Resolve and run guest-setup.sh inside container via shared tmp
+# ------------------------------------------------------------------------------
+# 4. Run guest-setup.sh inside the container (staged through the shared /tmp)
+# ------------------------------------------------------------------------------
 info "Configuring container environment, dependencies, Box64, Spotify, and SpotX..."
-
-GUEST_SETUP_LOCAL=""
-if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/guest-setup.sh" ]; then
-    GUEST_SETUP_LOCAL="${SCRIPT_DIR}/src/guest-setup.sh"
-fi
-
-REMOTE_REPO_RAW="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/guest-setup.sh"
 
 mkdir -p "$TERMUX_TMP"
 CONTAINER_SETUP_STAGING="${TERMUX_TMP}/spotx-guest-setup.sh"
-
-if [ -n "$GUEST_SETUP_LOCAL" ] && [ -f "$GUEST_SETUP_LOCAL" ]; then
-    info "Staging local guest setup script: ${GUEST_SETUP_LOCAL}"
-    cp "$GUEST_SETUP_LOCAL" "$CONTAINER_SETUP_STAGING"
-else
-    info "Fetching guest setup script from repository: ${REMOTE_REPO_RAW}"
-    if ! curl -fsSL "${REMOTE_REPO_RAW}?t=$(date +%s)" -o "$CONTAINER_SETUP_STAGING" \
-        || ! is_valid_script "$CONTAINER_SETUP_STAGING"; then
-        rm -f "$CONTAINER_SETUP_STAGING"
-        error "Could not download a valid guest setup script (network or GitHub error)."
-        error "Please check your connection and run the installer again."
-        exit 1
-    fi
+if ! fetch_repo_file "src/guest-setup.sh" "$CONTAINER_SETUP_STAGING"; then
+    error "Could not obtain a valid guest setup script (network or GitHub error)."
+    error "Please check your connection and run the installer again."
+    exit 1
 fi
 chmod +x "$CONTAINER_SETUP_STAGING"
 
@@ -298,137 +268,30 @@ proot-distro login "$CONTAINER_NAME" --shared-tmp -- \
         bash /tmp/spotx-guest-setup.sh
 rm -f "$CONTAINER_SETUP_STAGING"
 
-# 5. Install launcher scripts on Termux host
+# ------------------------------------------------------------------------------
+# 5. Host scripts, command wrappers and Termux:Widget shortcuts
+# ------------------------------------------------------------------------------
 info "Installing launcher scripts on Termux..."
+if ! sync_host_scripts; then
+    error "Host scripts could not be installed. The container is ready:"
+    error "re-run the installer when the connection is back (it will be quick)."
+    exit 1
+fi
+install_wrappers
 
-mkdir -p "$TERMUX_BIN"
-
-# Helper function to install a host script with atomic rename
-install_host_script() {
-    local local_rel="$1"
-    local remote_rel="$2"
-    local dest_file="$3"
-    local tmp_file="${dest_file}.tmp.$$"
-
-    if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/${local_rel}" ]; then
-        cp "${SCRIPT_DIR}/${local_rel}" "$tmp_file"
-    elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/${local_rel}" ]; then
-        cp "${SCRIPT_DIR}/src/${local_rel}" "$tmp_file"
-    elif [ -n "${_SPOTX_LIB:-}" ] && [ "$local_rel" = "common.sh" ] && [ -f "$_SPOTX_LIB" ]; then
-        cp "$_SPOTX_LIB" "$tmp_file"
-    else
-        curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/${remote_rel}?t=$(date +%s)" -o "$tmp_file" 2>/dev/null || true
-    fi
-
-    # Only replace the installed file with a real script (never an HTTP error page)
-    if is_valid_script "$tmp_file"; then
-        chmod +x "$tmp_file" 2>/dev/null || true
-        mv -f "$tmp_file" "$dest_file"
-    else
-        rm -f "$tmp_file" 2>/dev/null || true
-        warn "Could not fetch a valid copy of ${remote_rel}; keeping the existing file (if any)."
-    fi
-}
-
-install_host_script "start-spotify.sh" "src/start-spotify.sh" "${HOME}/start-spotify.sh"
-
-# Create wrapper in $PREFIX/bin so user can just type 'spotify' anywhere
-COMMAND_BIN="${TERMUX_BIN}/spotify"
-cat << 'RUN_CMD' > "$COMMAND_BIN"
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$HOME/start-spotify.sh" "$@"
-RUN_CMD
-chmod +x "$COMMAND_BIN"
-
-# Create stop wrapper in $PREFIX/bin so user can just type 'spotify-stop'
-STOP_BIN="${TERMUX_BIN}/spotify-stop"
-cat << 'STOP_CMD' > "$STOP_BIN"
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$HOME/start-spotify.sh" --stop "$@"
-STOP_CMD
-chmod +x "$STOP_BIN"
-
-# Install updater script and wrapper
-install_host_script "update-spotify.sh" "src/update-spotify.sh" "${HOME}/update-spotify.sh"
-UPDATE_BIN="${TERMUX_BIN}/spotify-update"
-cat << 'UPDATE_CMD' > "$UPDATE_BIN"
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$HOME/update-spotify.sh" "$@"
-UPDATE_CMD
-chmod +x "$UPDATE_BIN"
-
-# Install uninstaller script and wrapper
-install_host_script "uninstall.sh" "uninstall.sh" "${HOME}/uninstall-spotify.sh"
-UNINSTALL_BIN="${TERMUX_BIN}/spotify-uninstall"
-cat << 'UNINSTALL_CMD' > "$UNINSTALL_BIN"
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$HOME/uninstall-spotify.sh" "$@"
-UNINSTALL_CMD
-chmod +x "$UNINSTALL_BIN"
-
-# Install shared core library to ~/.spotx-termux/common.sh
-mkdir -p "${HOME}/.spotx-termux"
-install_host_script "common.sh" "src/common.sh" "${HOME}/.spotx-termux/common.sh"
-
-# Install doctor script and wrapper
-install_host_script "doctor.sh" "src/doctor.sh" "${HOME}/doctor-spotify.sh"
-DOCTOR_BIN="${TERMUX_BIN}/spotify-doctor"
-cat << 'DOCTOR_CMD' > "$DOCTOR_BIN"
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$HOME/doctor-spotify.sh" "$@"
-DOCTOR_CMD
-chmod +x "$DOCTOR_BIN"
-
-# Install media control script and wrapper
-install_host_script "control-spotify.sh" "src/control-spotify.sh" "${HOME}/control-spotify.sh"
-CONTROL_BIN="${TERMUX_BIN}/spotify-control"
-cat << 'CONTROL_CMD' > "$CONTROL_BIN"
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$HOME/control-spotify.sh" "$@"
-CONTROL_CMD
-chmod +x "$CONTROL_BIN"
-
-
-# Termux:Widget shortcut support (pre-creates ~/.shortcuts directory)
-SHORTCUTS_DIR="${HOME}/.shortcuts"
-ICONS_DIR="${SHORTCUTS_DIR}/icons"
-mkdir -p "$SHORTCUTS_DIR" "$ICONS_DIR"
-
-# Create Spotify shortcut
-cp "${HOME}/start-spotify.sh" "${SHORTCUTS_DIR}/Spotify"
-chmod +x "${SHORTCUTS_DIR}/Spotify"
-
-# Create Spotify-Stop shortcut
-cat << 'WIDGET_STOP' > "${SHORTCUTS_DIR}/Spotify-Stop"
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$HOME/start-spotify.sh" --stop
-WIDGET_STOP
-chmod +x "${SHORTCUTS_DIR}/Spotify-Stop"
-
-# Download Spotify icon for Termux:Widget from the project repository
-info "Downloading icon for Termux:Widget..."
-curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/spotify-icon.png?t=$(date +%s)" -o "${ICONS_DIR}/Spotify.png" 2>/dev/null || true
-cp "${ICONS_DIR}/Spotify.png" "${ICONS_DIR}/Spotify-Stop.png" 2>/dev/null || true
+info "Creating Termux:Widget shortcuts..."
+install_widget_shortcuts
 success "Termux:Widget shortcuts created: 'Spotify' and 'Spotify-Stop'"
 
-# Save SpotX-Termux version marker for runtime version detection
-mkdir -p "$SPOTX_DIR"
-if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/VERSION" ]; then
-    cp "${SCRIPT_DIR}/VERSION" "${SPOTX_DIR}/VERSION" 2>/dev/null || true
-elif [ -n "${TMP_BOOTSTRAP_DIR:-}" ] && [ -f "${TMP_BOOTSTRAP_DIR}/VERSION" ]; then
-    cp "${TMP_BOOTSTRAP_DIR}/VERSION" "${SPOTX_DIR}/VERSION" 2>/dev/null || true
-fi
-
-if [ -z "$SPOTX_TERMUX_VERSION" ] || [ "$SPOTX_TERMUX_VERSION" = "unknown" ]; then
-    SPOTX_TERMUX_VERSION="$(resolve_spotx_version)"
-fi
-echo "${SPOTX_TERMUX_VERSION:-unknown}" > "${HOME}/.spotx-termux-version"
-[ -d "$SPOTX_DIR" ] && echo "${SPOTX_TERMUX_VERSION:-unknown}" > "${SPOTX_DIR}/VERSION" 2>/dev/null || true
+# Version marker for runtime version detection of the installed scripts
+write_version_markers "$SPOTX_TERMUX_VERSION"
 
 # Send system notification on completion if termux-api is available
 notify_user "SpotX-Termux" "Installation completed successfully! Launch Spotify with 'spotify'." "check_circle"
 
+# ------------------------------------------------------------------------------
 # 6. Summary and Instructions
+# ------------------------------------------------------------------------------
 echo
 echo -e "${GREEN}${BOLD}============================================${CLR}"
 echo -e "${GREEN}${BOLD}    Installation Completed Successfully!    ${CLR}"

@@ -29,6 +29,11 @@ if [ -z "$_SPOTX_LIB" ] || [ ! -f "$_SPOTX_LIB" ]; then
 fi
 # shellcheck source=/dev/null
 source "$_SPOTX_LIB"
+if [ "${SPOTX_LIB_API:-1}" -lt 2 ]; then
+    echo "[X] Error: the installed SpotX-Termux library is outdated (${_SPOTX_LIB})." >&2
+    echo "    Please run 'spotify-update' to repair the installation." >&2
+    exit 1
+fi
 
 # Status Indicators (Text-based symbols, no emojis)
 SYM_PASS="${GREEN}${BOLD}[OK]${CLR}"
@@ -167,16 +172,10 @@ else
 fi
 
 # Check 1.4: Required Termux Packages
-REQUIRED_HOST_PKGS=("proot-distro" "pulseaudio" "wget" "curl" "jq")
-MISSING_PKGS=()
-for pkg_name in "${REQUIRED_HOST_PKGS[@]}"; do
-    if ! command -v "$pkg_name" >/dev/null 2>&1; then
-        MISSING_PKGS+=("$pkg_name")
-    fi
-done
+read -r -a MISSING_PKGS <<< "$(missing_pkgs "${SPOTX_CORE_PKGS[@]}")"
 
 if [ ${#MISSING_PKGS[@]} -eq 0 ]; then
-    echo -e "  ${SYM_PASS} Host Packages:     ${GREEN}all installed${CLR} ${DIM}(5/5)${CLR}"
+    echo -e "  ${SYM_PASS} Host Packages:     ${GREEN}all installed${CLR} ${DIM}(${#SPOTX_CORE_PKGS[@]}/${#SPOTX_CORE_PKGS[@]})${CLR}"
     record_pass
 else
     echo -e "  ${SYM_FAIL} Host Packages:     ${RED}missing: ${MISSING_PKGS[*]}${CLR}"
@@ -196,16 +195,16 @@ if [ "$IS_TERMUX" = true ]; then
 fi
 
 # Check 1.6: SpotX-Termux CLI commands
-SPOTX_COMMANDS=("spotify" "spotify-stop" "spotify-control" "spotify-update" "spotify-uninstall" "spotify-doctor")
 MISSING_CMDS=()
-for cmd in "${SPOTX_COMMANDS[@]}"; do
+for entry in "${SPOTX_WRAPPERS[@]}"; do
+    cmd="${entry%%|*}"
     if [ ! -x "${TERMUX_BIN}/${cmd}" ]; then
         MISSING_CMDS+=("$cmd")
     fi
 done
 
 if [ ${#MISSING_CMDS[@]} -eq 0 ]; then
-    echo -e "  ${SYM_PASS} CLI Wrappers:      ${GREEN}ready${CLR} ${DIM}(6/6 commands)${CLR}"
+    echo -e "  ${SYM_PASS} CLI Wrappers:      ${GREEN}ready${CLR} ${DIM}(${#SPOTX_WRAPPERS[@]}/${#SPOTX_WRAPPERS[@]} commands)${CLR}"
     record_pass
 else
     echo -e "  ${SYM_WARN} CLI Wrappers:      ${YELLOW}missing: ${MISSING_CMDS[*]}${CLR}"
@@ -213,7 +212,7 @@ else
 fi
 
 # Check 1.7: SpotX-Termux Shared Core Library
-if [ -f "${HOME}/.spotx-termux/common.sh" ]; then
+if [ -f "${SPOTX_DIR}/common.sh" ]; then
     echo -e "  ${SYM_PASS} Core Library:      ${GREEN}installed${CLR} ${DIM}(common.sh)${CLR}"
     record_pass
 else
@@ -222,7 +221,6 @@ else
 fi
 
 # Check 1.8: SpotX-Termux Log Directory & Diagnostic Logs
-LOG_DIR="${HOME}/.spotx-termux/logs"
 if [ -d "$LOG_DIR" ]; then
     FOUND_LOGS=()
     [ -f "${LOG_DIR}/install.log" ] && FOUND_LOGS+=("install.log")
@@ -292,7 +290,6 @@ if [ "$IS_TERMUX" = true ]; then
 fi
 
 # Check 2.3: Termux:Widget Shortcuts
-SHORTCUTS_DIR="${HOME}/.shortcuts"
 if [ -f "${SHORTCUTS_DIR}/Spotify" ] && [ -f "${SHORTCUTS_DIR}/Spotify-Stop" ]; then
     echo -e "  ${SYM_PASS} Widget Shortcuts:  ${GREEN}configured${CLR} ${DIM}(Spotify, Stop)${CLR}"
     record_pass
@@ -354,6 +351,7 @@ fi
 
 # Check 2.5: Media Notification Controller Script
 CTRL_SCRIPT="${HOME}/control-spotify.sh"
+# The notification buttons execute this script directly, so it needs a Termux shebang
 if [ -f "$CTRL_SCRIPT" ]; then
     if [ ! -x "$CTRL_SCRIPT" ]; then
         echo -e "  ${SYM_FAIL} Media Controller:  ${RED}not executable${CLR}"
@@ -404,7 +402,6 @@ else
 fi
 
 # Check 3.3: Termux-X11 Display Server Runtime Status
-TERMUX_TMP="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
 if pgrep -f "termux.x11" >/dev/null 2>&1 || pgrep -f "termux-x11" >/dev/null 2>&1; then
     echo -e "  ${SYM_INFO} Termux-X11 Server: ${GREEN}running${CLR} ${DIM}(Display :0)${CLR}"
 else
@@ -417,8 +414,6 @@ echo
 # LAYER 4: Ubuntu PRoot Container (Guest)
 # ==============================================================================
 echo -e "${BOLD}[4/4] Checking Ubuntu PRoot Container & Spotify...${CLR}"
-
-CONTAINER_NAME="ubuntu"
 
 if ! command -v proot-distro >/dev/null 2>&1; then
     echo -e "  ${SYM_FAIL} PRoot Container:            ${RED}proot-distro not installed${CLR}"
@@ -568,7 +563,7 @@ else
         record_pass
     else
         echo -e "  ${SYM_WARN} Window Manager:    ${YELLOW}none found${CLR}"
-        record_warn "Window Manager Missing" "Run 'proot-distro login ubuntu -- apt-get install -y matchbox-window-manager'"
+        record_warn "Window Manager Missing" "Run 'proot-distro login ${CONTAINER_NAME} -- apt-get install -y matchbox-window-manager'"
     fi
 
     # Spotify Binary & ELF integrity

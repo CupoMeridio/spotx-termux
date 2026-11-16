@@ -9,34 +9,43 @@ set -euo pipefail
 # Load SpotX-Termux Shared Library
 # ------------------------------------------------------------------------------
 _SPOTX_LIB=""
-SCRIPT_DIR=""
 if [ -n "${BASH_SOURCE[0]:-}" ]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
-    if [ -f "${SCRIPT_DIR}/common.sh" ]; then
-        _SPOTX_LIB="${SCRIPT_DIR}/common.sh"
-    elif [ -f "${SCRIPT_DIR}/src/common.sh" ]; then
-        _SPOTX_LIB="${SCRIPT_DIR}/src/common.sh"
+    _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+    if [ -f "${_script_dir}/common.sh" ]; then
+        _SPOTX_LIB="${_script_dir}/common.sh"
+    elif [ -f "${_script_dir}/src/common.sh" ]; then
+        _SPOTX_LIB="${_script_dir}/src/common.sh"
     fi
 fi
 if [ -z "$_SPOTX_LIB" ] && [ -f "${HOME}/.spotx-termux/common.sh" ]; then
     _SPOTX_LIB="${HOME}/.spotx-termux/common.sh"
 fi
-
-if [ -z "$_SPOTX_LIB" ] || [ ! -f "$_SPOTX_LIB" ]; then
-    echo "[X] Error: SpotX-Termux shared library not found (~/.spotx-termux/common.sh)" >&2
-    echo "    Please run 'bash ~/update-spotify.sh' or 'bash install.sh' to repair." >&2
-    exit 1
+if [ -n "$_SPOTX_LIB" ] && [ -f "$_SPOTX_LIB" ]; then
+    # shellcheck source=/dev/null
+    source "$_SPOTX_LIB"
 fi
-# shellcheck source=/dev/null
-source "$_SPOTX_LIB"
 
-# Fallbacks for an older installed common.sh: when upgrading, this script may run
-# with the previous library loaded, which does not yet define the validators.
-if ! declare -F is_valid_script >/dev/null; then
-    is_valid_script() { [ -s "$1" ] && [ "$(head -c 2 "$1" 2>/dev/null)" = "#!" ]; }
-fi
-if ! declare -F is_valid_version >/dev/null; then
-    is_valid_version() { [[ "${1:-}" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]]; }
+# Self-repair: the updater is the tool users run to fix their installation, so it
+# must also work when the installed library is missing or older than this script
+# (e.g. a previous update replaced the scripts but not common.sh). In that case
+# load a fresh copy of the library from the repository for this run.
+if [ "${SPOTX_LIB_API:-0}" -lt 2 ]; then
+    _fresh_lib="${PREFIX:-/data/data/com.termux/files/usr}/tmp/spotx-common.update.$$.sh"
+    if curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/common.sh?t=$(date +%s)" -o "$_fresh_lib" 2>/dev/null \
+        && [ "$(head -c 2 "$_fresh_lib" 2>/dev/null)" = "#!" ]; then
+        # shellcheck source=/dev/null
+        source "$_fresh_lib"
+        rm -f "$_fresh_lib"
+    else
+        rm -f "$_fresh_lib" 2>/dev/null || true
+        echo "[X] Error: SpotX-Termux shared library is missing or outdated, and a fresh" >&2
+        echo "    copy could not be downloaded. Check your connection and retry." >&2
+        exit 1
+    fi
+    if [ "${SPOTX_LIB_API:-0}" -lt 2 ]; then
+        echo "[X] Error: the SpotX-Termux library on GitHub is older than this updater." >&2
+        exit 1
+    fi
 fi
 
 show_help() {
@@ -80,8 +89,8 @@ while [[ $# -gt 0 ]]; do
             shift
             if [ -x "${HOME}/doctor-spotify.sh" ]; then
                 exec "$HOME/doctor-spotify.sh" "$@"
-            elif [ -n "${SCRIPT_DIR:-}" ] && [ -f "${SCRIPT_DIR}/doctor.sh" ]; then
-                exec bash "${SCRIPT_DIR}/doctor.sh" "$@"
+            elif [ -n "$SPOTX_REPO_ROOT" ]; then
+                exec bash "${SPOTX_REPO_ROOT}/src/doctor.sh" "$@"
             elif command -v spotify-doctor >/dev/null 2>&1; then
                 exec spotify-doctor "$@"
             else
@@ -120,12 +129,6 @@ done
 # Initialize logging for the update run
 setup_logging "update.log"
 
-if [ -z "${SPOTX_TERMUX_VERSION:-}" ] || [ "${SPOTX_TERMUX_VERSION}" = "unknown" ]; then
-    SPOTX_TERMUX_VERSION="$(resolve_spotx_version)"
-fi
-
-CONTAINER_NAME="ubuntu"
-
 # Verify proot-distro is installed
 if ! command -v proot-distro > /dev/null 2>&1; then
     error "proot-distro command not found."
@@ -140,18 +143,13 @@ if ! is_container_installed "$CONTAINER_NAME"; then
     exit 1
 fi
 
-# Helper: fetch latest SpotX-Termux script version from local repo or GitHub
+# Helper: latest SpotX-Termux script version (local checkout when running from one, else GitHub)
 get_latest_spotx_version() {
     local ver=""
-    if [ "$SCRIPT_DIR" != "$HOME" ] && [ -n "$SCRIPT_DIR" ]; then
-        if [ -f "${SCRIPT_DIR}/../VERSION" ]; then
-            ver=$(cat "${SCRIPT_DIR}/../VERSION" 2>/dev/null | tr -d '[:space:]')
-        elif [ -f "${SCRIPT_DIR}/VERSION" ]; then
-            ver=$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null | tr -d '[:space:]')
-        fi
-    fi
-    if [ -z "$ver" ] || [ "$ver" = "unknown" ]; then
-        ver=$(curl -fsSL --connect-timeout 2 --max-time 4 "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/VERSION?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
+    if [ -n "$SPOTX_REPO_ROOT" ] && [ -f "${SPOTX_REPO_ROOT}/VERSION" ]; then
+        ver=$(tr -d '[:space:]' < "${SPOTX_REPO_ROOT}/VERSION" 2>/dev/null || true)
+    else
+        ver=$(curl -fsSL --connect-timeout 2 --max-time 4 "${SPOTX_REPO_RAW}/VERSION?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
     fi
     # Reject anything that is not CalVer (e.g. an error body like "404:NotFound")
     is_valid_version "$ver" || ver=""
@@ -364,190 +362,56 @@ if [ "$SPOTX_CHECK_ONLY" = "1" ]; then
 fi
 
 # If all components are up-to-date and user didn't request --force, --spotx-only, or --skip-spotx,
-# ensure wrappers exist, refresh shortcuts cleanly, and exit early
+# ensure wrappers and shortcuts exist, then exit early
 if [ "$SPOTX_FORCE" = "0" ] && [ "$SPOTX_ONLY" = "0" ] && [ "$SPOTX_SKIP" = "0" ] && [ "$CHANGES_COUNT" = "0" ]; then
     info "Refreshing host shortcuts and wrapper commands..."
-    mkdir -p "$TERMUX_BIN" "${HOME}/.shortcuts"
-    [ -f "${HOME}/start-spotify.sh" ] && cp "${HOME}/start-spotify.sh" "${HOME}/.shortcuts/Spotify" 2>/dev/null || true
-    chmod +x "${HOME}/.shortcuts/Spotify" 2>/dev/null || true
-
-    cat << 'STOP_CMD' > "${TERMUX_BIN}/spotify-stop"
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$HOME/start-spotify.sh" --stop "$@"
-STOP_CMD
-    chmod +x "${TERMUX_BIN}/spotify-stop" 2>/dev/null || true
-
-    cat << 'DOCTOR_CMD' > "${TERMUX_BIN}/spotify-doctor"
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$HOME/doctor-spotify.sh" "$@"
-DOCTOR_CMD
-    chmod +x "${TERMUX_BIN}/spotify-doctor" 2>/dev/null || true
-
-    cat << 'CONTROL_CMD' > "${TERMUX_BIN}/spotify-control"
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$HOME/control-spotify.sh" "$@"
-CONTROL_CMD
-    chmod +x "${TERMUX_BIN}/spotify-control" 2>/dev/null || true
-
+    install_wrappers
+    install_widget_shortcuts
     success "System is verified and fully up-to-date."
     exit 0
 fi
 
-# Stage guest-setup.sh for container execution
-GUEST_SETUP_LOCAL=""
-if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/guest-setup.sh" ]; then
-    GUEST_SETUP_LOCAL="${SCRIPT_DIR}/guest-setup.sh"
-elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/guest-setup.sh" ]; then
-    GUEST_SETUP_LOCAL="${SCRIPT_DIR}/src/guest-setup.sh"
-fi
-
-REMOTE_REPO_RAW="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/guest-setup.sh"
-
+# Stage guest-setup.sh for container execution (through the shared /tmp)
 mkdir -p "$TERMUX_TMP"
 CONTAINER_SETUP_STAGING="${TERMUX_TMP}/spotx-guest-setup.sh"
-
-# Ensure cleanup on exit
 trap 'rm -f "$CONTAINER_SETUP_STAGING"' EXIT
 
-if [ -n "$GUEST_SETUP_LOCAL" ] && [ -f "$GUEST_SETUP_LOCAL" ]; then
-    info "Using local guest setup script: ${GUEST_SETUP_LOCAL}"
-    cp "$GUEST_SETUP_LOCAL" "$CONTAINER_SETUP_STAGING"
-else
-    info "Fetching latest guest setup script from repository..."
-    if ! curl -fsSL "${REMOTE_REPO_RAW}?t=$(date +%s)" -o "$CONTAINER_SETUP_STAGING" \
-        || ! is_valid_script "$CONTAINER_SETUP_STAGING"; then
-        error "Could not download a valid guest setup script (network or GitHub error)."
-        error "No changes were made. Please retry later: spotify-update"
-        exit 1
-    fi
+info "Fetching guest setup script..."
+if ! fetch_repo_file "src/guest-setup.sh" "$CONTAINER_SETUP_STAGING"; then
+    error "Could not obtain a valid guest setup script (network or GitHub error)."
+    error "No changes were made. Please retry later: spotify-update"
+    exit 1
 fi
 chmod +x "$CONTAINER_SETUP_STAGING"
 
-# Auto-detect and install any newly required host packages (e.g. termux-api, jq, etc.)
+# Auto-detect and install any newly required host packages (e.g. termux-api)
 if [ "$IS_TERMUX" = true ] && command -v pkg >/dev/null 2>&1; then
-    MISSING_HOST_PKGS=()
-    command -v proot-distro >/dev/null 2>&1 || MISSING_HOST_PKGS+=("proot-distro")
-    command -v pulseaudio >/dev/null 2>&1 || MISSING_HOST_PKGS+=("pulseaudio")
-    command -v wget >/dev/null 2>&1 || MISSING_HOST_PKGS+=("wget")
-    command -v curl >/dev/null 2>&1 || MISSING_HOST_PKGS+=("curl")
-    command -v jq >/dev/null 2>&1 || MISSING_HOST_PKGS+=("jq")
-    command -v termux-notification >/dev/null 2>&1 || MISSING_HOST_PKGS+=("termux-api")
-
+    read -r -a MISSING_HOST_PKGS <<< "$(missing_pkgs "${SPOTX_CORE_PKGS[@]}" "${SPOTX_OPTIONAL_PKGS[@]}")"
     if [ ${#MISSING_HOST_PKGS[@]} -gt 0 ]; then
         info "Installing newly required host packages: ${MISSING_HOST_PKGS[*]}..."
         pkg install -y "${MISSING_HOST_PKGS[@]}" 2>/dev/null || warn "Failed to auto-install some host packages: ${MISSING_HOST_PKGS[*]}"
     fi
 fi
 
-# Ensure Termux allows external apps
-mkdir -p "${HOME}/.termux"
-if grep -q "^[[:space:]]*allow-external-apps" "${HOME}/.termux/termux.properties" 2>/dev/null; then
-    sed -i 's/^[[:space:]]*allow-external-apps[[:space:]]*=.*/allow-external-apps = true/' "${HOME}/.termux/termux.properties"
-else
-    echo "allow-external-apps = true" >> "${HOME}/.termux/termux.properties"
-fi
-termux-reload-settings >/dev/null 2>&1 || true
-
-# Helper function to refresh a host script from local repo or remote GitHub
-# Uses an atomic rename (mv -f) to prevent self-modifying script buffer corruption
-sync_host_script() {
-    local local_rel="$1"
-    local remote_rel="$2"
-    local dest_file="$3"
-    local local_file=""
-    local tmp_file="${dest_file}.tmp.$$"
-
-    # Prevent falsely identifying the installed $HOME directory as a local git repository.
-    if [ "$SCRIPT_DIR" != "$HOME" ]; then
-        if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/${local_rel}" ]; then
-            local_file="${SCRIPT_DIR}/${local_rel}"
-        elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/src/${local_rel}" ]; then
-            local_file="${SCRIPT_DIR}/src/${local_rel}"
-        fi
-    fi
-
-    if [ -n "$local_file" ] && [ -f "$local_file" ]; then
-        cp "$local_file" "$tmp_file"
-    else
-        curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/${remote_rel}?t=$(date +%s)" -o "$tmp_file" 2>/dev/null || true
-    fi
-
-    # Only replace the installed file with a real script (never an HTTP error page)
-    if is_valid_script "$tmp_file"; then
-        chmod +x "$tmp_file" 2>/dev/null || true
-        mv -f "$tmp_file" "$dest_file"
-    else
-        rm -f "$tmp_file" 2>/dev/null || true
-        warn "Could not fetch a valid copy of ${remote_rel}; keeping the installed version."
-    fi
-}
+ensure_allow_external_apps
 
 info "[1/3] Synchronizing host scripts and configuration..."
-mkdir -p "${HOME}/.spotx-termux"
-sync_host_script "common.sh" "src/common.sh" "${HOME}/.spotx-termux/common.sh"
-sync_host_script "start-spotify.sh" "src/start-spotify.sh" "${HOME}/start-spotify.sh"
-sync_host_script "update-spotify.sh" "src/update-spotify.sh" "${HOME}/update-spotify.sh"
-sync_host_script "uninstall.sh" "uninstall.sh" "${HOME}/uninstall-spotify.sh"
-sync_host_script "doctor.sh" "src/doctor.sh" "${HOME}/doctor-spotify.sh"
-sync_host_script "control-spotify.sh" "src/control-spotify.sh" "${HOME}/control-spotify.sh"
-sed -i '1s|.*|#!/data/data/com.termux/files/usr/bin/bash|' "${HOME}/control-spotify.sh" 2>/dev/null || true
-chmod +x "${HOME}/control-spotify.sh" 2>/dev/null || true
-
-# Update version marker file from local repo or GitHub remote
-if [ -n "$SPOTX_TERMUX_LATEST_VERSION" ] && [ "$SPOTX_TERMUX_LATEST_VERSION" != "unknown" ]; then
-    echo "$SPOTX_TERMUX_LATEST_VERSION" > "${HOME}/.spotx-termux-version"
-    echo "$SPOTX_TERMUX_LATEST_VERSION" > "${HOME}/.spotx-termux/VERSION" 2>/dev/null || true
-    SPOTX_TERMUX_VERSION="$SPOTX_TERMUX_LATEST_VERSION"
-fi
-
-# Ensure spotify-stop, spotify-doctor, and spotify-control wrappers exist in $BIN_DIR
-mkdir -p "$TERMUX_BIN"
-cat << 'STOP_CMD' > "${TERMUX_BIN}/spotify-stop"
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$HOME/start-spotify.sh" --stop "$@"
-STOP_CMD
-chmod +x "${TERMUX_BIN}/spotify-stop"
-
-cat << 'DOCTOR_CMD' > "${TERMUX_BIN}/spotify-doctor"
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$HOME/doctor-spotify.sh" "$@"
-DOCTOR_CMD
-chmod +x "${TERMUX_BIN}/spotify-doctor"
-
-cat << 'CONTROL_CMD' > "${TERMUX_BIN}/spotify-control"
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$HOME/control-spotify.sh" "$@"
-CONTROL_CMD
-chmod +x "${TERMUX_BIN}/spotify-control"
-
-# Ensure Termux:Widget shortcuts are kept up to date
-SHORTCUTS_DIR="${HOME}/.shortcuts"
-if [ -d "$SHORTCUTS_DIR" ]; then
-    cp "${HOME}/start-spotify.sh" "${SHORTCUTS_DIR}/Spotify" 2>/dev/null || true
-    chmod +x "${SHORTCUTS_DIR}/Spotify" 2>/dev/null || true
-    cat << 'WIDGET_STOP' > "${SHORTCUTS_DIR}/Spotify-Stop"
-#!/data/data/com.termux/files/usr/bin/bash
-exec "$HOME/start-spotify.sh" --stop
-WIDGET_STOP
-    chmod +x "${SHORTCUTS_DIR}/Spotify-Stop" 2>/dev/null || true
-fi
-
-# Terminate running Spotify, background media bridge, and PulseAudio processes to avoid conflicts
-info "[2/3] Preparing PRoot environment and stopping active instances..."
-pkill -x spotify 2>/dev/null || true
-pkill -f "spotx-media.fifo" 2>/dev/null || true
-if has_termux_api && command -v termux-notification-remove >/dev/null 2>&1; then
-    if command -v timeout >/dev/null 2>&1; then
-        timeout 2 termux-notification-remove "spotx-player" >/dev/null 2>&1 || true
-    else
-        termux-notification-remove "spotx-player" >/dev/null 2>&1 || true
+if sync_host_scripts; then
+    # Scripts and version marker move together, so the marker never claims a
+    # version whose scripts were not actually installed
+    if [ "$SPOTX_TERMUX_LATEST_VERSION" != "unknown" ]; then
+        write_version_markers "$SPOTX_TERMUX_LATEST_VERSION"
+        SPOTX_TERMUX_VERSION="$SPOTX_TERMUX_LATEST_VERSION"
     fi
+else
+    warn "Continuing with the currently installed host scripts."
 fi
-if command -v pulseaudio >/dev/null 2>&1; then
-    pulseaudio -k 2>/dev/null || true
-fi
-pkill -x pulseaudio 2>/dev/null || true
-rm -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/pulse-socket" 2>/dev/null || true
+install_wrappers
+install_widget_shortcuts
+
+# Terminate the running session (Spotify, media bridge, display, audio) to avoid conflicts
+info "[2/3] Preparing PRoot environment and stopping active instances..."
+stop_spotx_session
 
 # Run inside PRoot container with appropriate flags
 info "[3/3] Updating Spotify and SpotX inside container '${CONTAINER_NAME}'..."
@@ -562,4 +426,3 @@ proot-distro login "$CONTAINER_NAME" --shared-tmp -- \
 
 success "Update process finished! Log saved to ${LOG_FILE}"
 notify_user "SpotX-Termux" "Spotify update and SpotX patch completed successfully!" "check_circle"
-

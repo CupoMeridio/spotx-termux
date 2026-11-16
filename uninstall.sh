@@ -8,61 +8,43 @@ set -euo pipefail
 # ------------------------------------------------------------------------------
 # Load SpotX-Termux Shared Library
 # ------------------------------------------------------------------------------
+# Sources, in order: repo checkout, installed copy, then a fresh bootstrap copy
+# from GitHub (one-liner 'curl ... | bash', or an installed copy that is outdated).
 _SPOTX_LIB=""
 if [ -n "${BASH_SOURCE[0]:-}" ]; then
-    _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
-    if [ -f "${_SCRIPT_DIR}/common.sh" ]; then
-        _SPOTX_LIB="${_SCRIPT_DIR}/common.sh"
-    elif [ -f "${_SCRIPT_DIR}/src/common.sh" ]; then
-        _SPOTX_LIB="${_SCRIPT_DIR}/src/common.sh"
+    _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+    if [ -f "${_script_dir}/src/common.sh" ]; then
+        _SPOTX_LIB="${_script_dir}/src/common.sh"
     fi
 fi
 if [ -z "$_SPOTX_LIB" ] && [ -f "${HOME}/.spotx-termux/common.sh" ]; then
     _SPOTX_LIB="${HOME}/.spotx-termux/common.sh"
 fi
-
-if [ -n "$_SPOTX_LIB" ] && [ -f "$_SPOTX_LIB" ]; then
+if [ -n "$_SPOTX_LIB" ]; then
     # shellcheck source=/dev/null
     source "$_SPOTX_LIB"
-else
-    # Fallback for uninstaller if ~/.spotx-termux was already removed
-    SPOTX_TERMUX_VERSION="unknown"
-    CLR='\033[0m'
-    BOLD='\033[1m'
-    GREEN='\033[0;32m'
-    CYAN='\033[0;36m'
-    YELLOW='\033[0;33m'
-    RED='\033[0;31m'
-    DIM='\033[2m'
-    info()    { echo -e "${CYAN}${BOLD}[*]${CLR} $*"; }
-    success() { echo -e "${GREEN}${BOLD}[OK]${CLR} $*"; }
-    warn()    { echo -e "${YELLOW}${BOLD}[! ]${CLR} $*"; }
-    error()   { echo -e "${RED}${BOLD}[X ]${CLR} $*" >&2; }
-    setup_logging() { :; }
-    TERMUX_BIN="${PREFIX:-/data/data/com.termux/files/usr}/bin"
-    TERMUX_TMP="${TMPDIR:-${PREFIX:-/data/data/com.termux/files/usr}/tmp}"
-    is_container_installed() {
-        local name="$1"
-        local prefix="${PREFIX:-/data/data/com.termux/files/usr}"
-        if [ -d "${prefix}/var/lib/proot-distro/containers/${name}" ] || \
-           [ -d "${prefix}/var/lib/proot-distro/installed-rootfs/${name}" ] || \
-           [ -d "/usr/var/lib/proot-distro/containers/${name}" ] || \
-           [ -d "/usr/var/lib/proot-distro/installed-rootfs/${name}" ]; then
-            return 0
-        fi
-        if command -v proot-distro >/dev/null 2>&1; then
-            if proot-distro login "$name" -- true >/dev/null 2>&1; then
-                return 0
-            fi
-        fi
-        return 1
-    }
+fi
+if [ "${SPOTX_LIB_API:-0}" -lt 2 ]; then
+    _fresh_lib="${PREFIX:-/data/data/com.termux/files/usr}/tmp/spotx-common.uninstall.$$.sh"
+    if curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/common.sh?t=$(date +%s)" -o "$_fresh_lib" 2>/dev/null \
+        && [ "$(head -c 2 "$_fresh_lib" 2>/dev/null)" = "#!" ]; then
+        # shellcheck source=/dev/null
+        source "$_fresh_lib"
+        rm -f "$_fresh_lib"
+    else
+        rm -f "$_fresh_lib" 2>/dev/null || true
+        echo "[X] Error: SpotX-Termux shared library not available (offline?)." >&2
+        echo "    Connect to the internet and run the uninstaller again." >&2
+        exit 1
+    fi
+    if [ "${SPOTX_LIB_API:-0}" -lt 2 ]; then
+        echo "[X] Error: the SpotX-Termux library on GitHub is older than this uninstaller." >&2
+        exit 1
+    fi
 fi
 WHITE='\033[1;37m'
 
-CONTAINER_NAME="ubuntu"
 PREFIX_DIR="${PREFIX:-/data/data/com.termux/files/usr}"
-SHORTCUTS_DIR="${HOME}/.shortcuts"
 
 # Flags
 AUTO_YES=0
@@ -109,31 +91,17 @@ Examples:
 EOF
 }
 
-# Read user input safely even when piped into bash
+# Read user input safely even when piped into bash (-y answers with the default, or 'y')
 prompt_user() {
     local prompt_text="$1"
     local var_name="$2"
     local default_val="${3:-}"
 
     if [ "$AUTO_YES" -eq 1 ]; then
-        eval "$var_name=\"${default_val:-y}\""
+        printf -v "$var_name" '%s' "${default_val:-y}"
         return 0
     fi
-
-    local reply=""
-    if [ -t 0 ]; then
-        read -rp "$prompt_text" reply
-    elif [ -e /dev/tty ]; then
-        read -rp "$prompt_text" reply < /dev/tty
-    else
-        # Non-interactive without tty and without -y: use default
-        reply="$default_val"
-    fi
-
-    if [ -z "$reply" ]; then
-        reply="$default_val"
-    fi
-    eval "$var_name=\"$reply\""
+    prompt_tty "$prompt_text" "$var_name" "$default_val"
 }
 
 confirm_action() {
@@ -159,49 +127,27 @@ confirm_action() {
 
 kill_spotify_processes() {
     info "Terminating active Spotify, audio, and display processes..."
-
-    # Safely terminate Spotify desktop client processes directly from host.
-    # We must NOT use 'pkill -f spotify' because that regex matches
-    # 'spotify-uninstall' and 'uninstall-spotify.sh', killing the uninstaller itself!
-    # All container processes run under the Termux UID, so host pkill terminates Spotify directly.
-    pkill -x spotify 2>/dev/null || true
-    pkill -f "/usr/share/spotify/spotify" 2>/dev/null || true
-    pkill -f "/usr/local/bin/spotify-termux" 2>/dev/null || true
-    sleep 0.5 2>/dev/null || true
-    pkill -9 -x spotify 2>/dev/null || true
-    pkill -9 -f "/usr/share/spotify/spotify" 2>/dev/null || true
-    pkill -9 -f "/usr/local/bin/spotify-termux" 2>/dev/null || true
-
-    # Terminate host audio / X11
-    pkill -f "termux.x11" 2>/dev/null || true
-    pkill -f "termux-x11" 2>/dev/null || true
-    if command -v pulseaudio >/dev/null 2>&1; then
-        pulseaudio -k 2>/dev/null || true
-    fi
-    pkill -x pulseaudio 2>/dev/null || true
-
-    # Clean temporary sockets and lock files
-    rm -rf "${TERMUX_TMP}/.X11-unix" "${TERMUX_TMP}/.X0-lock" 2>/dev/null || true
+    stop_spotx_session
 }
 
 remove_launchers() {
     info "Removing Termux launchers, wrappers, and shortcuts..."
-    local files_to_remove=(
-        "${TERMUX_BIN}/spotify"
-        "${TERMUX_BIN}/spotify-stop"
-        "${TERMUX_BIN}/spotify-control"
-        "${TERMUX_BIN}/spotify-update"
-        "${TERMUX_BIN}/spotify-doctor"
-        "${TERMUX_BIN}/spotify-uninstall"
-        "${HOME}/start-spotify.sh"
-        "${HOME}/control-spotify.sh"
-        "${HOME}/update-spotify.sh"
-        "${HOME}/uninstall-spotify.sh"
-        "${HOME}/doctor-spotify.sh"
-        "${HOME}/.spotx-termux-version"
-        "${SHORTCUTS_DIR}/Spotify"
-        "${SHORTCUTS_DIR}/Spotify-Stop"
-    )
+    # Built from the same tables install/update use, so nothing installed is forgotten.
+    # ~/.spotx-termux (library + logs) is only removed by the full uninstall.
+    local entry dest name files_to_remove=()
+    for entry in "${SPOTX_WRAPPERS[@]}"; do
+        files_to_remove+=("${TERMUX_BIN}/${entry%%|*}")
+    done
+    for entry in "${SPOTX_HOST_FILES[@]}"; do
+        dest="${entry#*|}"
+        [[ "$dest" == "${SPOTX_DIR}/"* ]] && continue
+        files_to_remove+=("$dest")
+    done
+    for entry in "${SPOTX_SHORTCUTS[@]}"; do
+        name="${entry%%|*}"
+        files_to_remove+=("${SHORTCUTS_DIR}/${name}" "${SHORTCUTS_DIR}/icons/${name}.png")
+    done
+    files_to_remove+=("${HOME}/.spotx-termux-version")
 
     for file in "${files_to_remove[@]}"; do
         if [ -e "$file" ] || [ -L "$file" ]; then

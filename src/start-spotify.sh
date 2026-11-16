@@ -28,6 +28,12 @@ if [ -z "$_SPOTX_LIB" ] || [ ! -f "$_SPOTX_LIB" ]; then
 fi
 # shellcheck source=/dev/null
 source "$_SPOTX_LIB"
+if [ "${SPOTX_LIB_API:-1}" -lt 2 ]; then
+    echo "[X] Error: the installed SpotX-Termux library is outdated (${_SPOTX_LIB})." >&2
+    echo "    Please repair the installation with:" >&2
+    echo "    curl -fsSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh | bash" >&2
+    exit 1
+fi
 
 # ------------------------------------------------------------------------------
 # Handle --version flag
@@ -59,37 +65,9 @@ fi
 # ------------------------------------------------------------------------------
 if [ "${1:-}" = "--stop" ] || [ "${1:-}" = "stop" ] || [ "${1:-}" = "-k" ] || [ "${1:-}" = "--kill" ]; then
     echo -e "${YELLOW}${BOLD}[*] Stopping SpotX Spotify and background services...${CLR}"
-
-    # Terminate Spotify and window manager processes
-    pkill -x spotify 2>/dev/null || true
-    pkill -f "/usr/share/spotify/spotify" 2>/dev/null || true
-    pkill -f "/usr/local/bin/spotify-termux" 2>/dev/null || true
-    pkill -x matchbox-window-manager 2>/dev/null || true
-    pkill -x openbox 2>/dev/null || true
-    sleep 0.2
-    pkill -9 -x spotify 2>/dev/null || true
-    pkill -9 -f "/usr/share/spotify/spotify" 2>/dev/null || true
-
-    # Terminate Termux-X11 display server and close Android app
-    am broadcast -a com.termux.x11.ACTION_STOP -p com.termux.x11 > /dev/null 2>&1 || true
-    pkill -f "termux.x11" 2>/dev/null || true
-    pkill -f "termux-x11" 2>/dev/null || true
-    rm -f "${TERMUX_TMP}/.X0-lock" "${TERMUX_TMP}/.X11-unix/X0" 2>/dev/null || true
-
-    # Stop PulseAudio to close audio hardware device and save battery
-    if command -v pulseaudio >/dev/null 2>&1; then
-        pulseaudio -k 2>/dev/null || true
-    fi
-    pkill -x pulseaudio 2>/dev/null || true
-
-    # Release Android CPU wake-lock
-    if command -v termux-wake-unlock > /dev/null 2>&1; then
-        termux-wake-unlock 2>/dev/null || true
-    fi
-
-    # Restore terminal mode
+    # A running launcher notices Spotify exiting and runs its own (idempotent) cleanup
+    stop_spotx_session
     stty sane 2>/dev/null || true
-
     echo -e "${GREEN}${BOLD}[OK] SpotX Spotify stopped successfully.${CLR}"
     exit 0
 fi
@@ -109,8 +87,6 @@ fi
 # instance: the duplicate Spotify would exit immediately and this script's EXIT
 # trap would then tear down the session that is already playing.
 # ------------------------------------------------------------------------------
-SESSION_LOCK="${TERMUX_TMP}/spotx-session.pid"
-
 session_owner_alive() {
     local pid=""
     pid="$(cat "$SESSION_LOCK" 2>/dev/null || true)"
@@ -167,19 +143,7 @@ if command -v termux-wake-lock > /dev/null 2>&1; then
 fi
 
 # 1. PulseAudio Audio Bridge (TCP 127.0.0.1 + OpenSL ES Android Sink)
-PULSE_CONFIG_DIR="${HOME}/.config/pulse"
-mkdir -p "$PULSE_CONFIG_DIR"
-cat << 'PULSE_CONF' > "${PULSE_CONFIG_DIR}/daemon.conf"
-exit-idle-time = -1
-default-fragments = 12
-default-fragment-size-msec = 40
-resample-method = speex-float-1
-default-sample-rate = 48000
-alternate-sample-rate = 44100
-default-sample-channels = 2
-high-priority = yes
-realtime-scheduling = no
-PULSE_CONF
+write_pulse_config
 
 # Spotify is guaranteed not to be running here (single-session guard above), so
 # reload the PulseAudio daemon to pick up the optimal configuration
@@ -236,54 +200,17 @@ cleanup() {
 
     echo -e "\n${YELLOW}[*] Shutting down SpotX Spotify and background services...${CLR}"
 
-    # Remove Android media notification first (before killing the bridge)
-    if has_termux_api && command -v termux-notification-remove >/dev/null 2>&1; then
-        (
-            if command -v timeout >/dev/null 2>&1; then
-                timeout 2 termux-notification-remove "spotx-player" >/dev/null 2>&1 || true
-            else
-                termux-notification-remove "spotx-player" >/dev/null 2>&1 || true
-            fi
-        ) &
-    fi
-
-    # Stop Android notification media bridge
+    # Stop the host side of the notification bridge before tearing everything down
     if [ -n "${NOTIFY_BRIDGE_PID:-}" ]; then
         kill "$NOTIFY_BRIDGE_PID" 2>/dev/null || true
     fi
-    pkill -f "spotx-media.fifo" 2>/dev/null || true
-    rm -f "${TERMUX_TMP}/spotx-media.fifo" "${TERMUX_TMP}/spotx-control.fifo" "${TERMUX_TMP}/spotx-media.status" "${TERMUX_TMP}/spotx-media.status.tmp" 2>/dev/null || true
 
-    # Terminate container Spotify and window manager processes
-    pkill -x spotify 2>/dev/null || true
-    pkill -f "/usr/share/spotify/spotify" 2>/dev/null || true
-    pkill -f "/usr/local/bin/spotify-termux" 2>/dev/null || true
-    pkill -x matchbox-window-manager 2>/dev/null || true
-    pkill -x openbox 2>/dev/null || true
-    
+    stop_spotx_session
+
     # Suppress bash job control output by disowning before kill
     if [ -n "${SPOTIFY_PID:-}" ]; then
         disown "$SPOTIFY_PID" 2>/dev/null || true
         kill -9 "$SPOTIFY_PID" 2>/dev/null || true
-    fi
-
-    # Close Termux-X11 Android app window
-    am broadcast -a com.termux.x11.ACTION_STOP -p com.termux.x11 > /dev/null 2>&1 || true
-
-    # Terminate Termux-X11 server and remove sockets
-    pkill -f "termux.x11" 2>/dev/null || true
-    pkill -f "termux-x11" 2>/dev/null || true
-    rm -f "${TERMUX_TMP}/.X0-lock" "${TERMUX_TMP}/.X11-unix/X0" 2>/dev/null || true
-
-    # Stop PulseAudio to save battery when not in use
-    if command -v pulseaudio >/dev/null 2>&1; then
-        pulseaudio -k 2>/dev/null || true
-    fi
-    pkill -x pulseaudio 2>/dev/null || true
-
-    # Release Android CPU wake-lock
-    if command -v termux-wake-unlock > /dev/null 2>&1; then
-        termux-wake-unlock 2>/dev/null || true
     fi
 
     # Restore terminal mode
@@ -300,24 +227,18 @@ trap cleanup EXIT INT TERM HUP
 
 # 5. Start Android Media Notification Bridge if Termux:API is available
 NOTIFY_BRIDGE_PID=""
-if has_termux_api && command -v termux-notification >/dev/null 2>&1; then
+if has_termux_api; then
     # Cleanup any orphan notification left by a previous session killed with SIGKILL
     # (trap cleanup is not called on SIGKILL, so we clean up proactively here)
-    if command -v termux-notification-remove >/dev/null 2>&1; then
-        if command -v timeout >/dev/null 2>&1; then
-            timeout 2 termux-notification-remove "spotx-player" >/dev/null 2>&1 || true
-        else
-            termux-notification-remove "spotx-player" 2>/dev/null || true
-        fi
-    fi
+    remove_notification "$PLAYER_NOTIFICATION_ID"
 
     mkdir -p "${TERMUX_TMP}"
-    rm -f "${TERMUX_TMP}/spotx-media.fifo"
-    mkfifo "${TERMUX_TMP}/spotx-media.fifo" 2>/dev/null || true
+    rm -f "$MEDIA_FIFO"
+    mkfifo "$MEDIA_FIFO" 2>/dev/null || true
 
-    if [ -p "${TERMUX_TMP}/spotx-media.fifo" ]; then
+    if [ -p "$MEDIA_FIFO" ]; then
         (
-            while [ -p "${TERMUX_TMP}/spotx-media.fifo" ]; do
+            while [ -p "$MEDIA_FIFO" ]; do
                 while read -r line; do
                     [ -z "$line" ] && continue
                     status="${line%%:::*}"
@@ -336,40 +257,24 @@ if has_termux_api && command -v termux-notification >/dev/null 2>&1; then
                     fi
 
                     # Resolve the control script path directly so that termux-api can execute it.
-                    # We MUST bypass the $PREFIX/bin wrappers because termux-api drops the $HOME 
+                    # We MUST bypass the $PREFIX/bin wrappers because termux-api drops the $HOME
                     # variable, which the wrappers rely on. The target script itself exports it safely.
                     ctrl_bin="${HOME:-/data/data/com.termux/files/home}/control-spotify.sh"
 
-                    if command -v timeout >/dev/null 2>&1; then
-                        timeout 2 termux-notification \
-                            --id "spotx-player" \
-                            --title "$local_title" \
-                            --content "$artist" \
-                            --icon "audiotrack" \
-                            --alert-once \
-                            --priority max \
-                            --button1 "⏮ Prev" \
-                            --button1-action "${ctrl_bin} previous" \
-                            --button2 "$play_btn" \
-                            --button2-action "${ctrl_bin} play-pause" \
-                            --button3 "⏭ Next" \
-                            --button3-action "${ctrl_bin} next" >/dev/null 2>&1 || true
-                    else
-                        termux-notification \
-                            --id "spotx-player" \
-                            --title "$local_title" \
-                            --content "$artist" \
-                            --icon "audiotrack" \
-                            --alert-once \
-                            --priority max \
-                            --button1 "⏮ Prev" \
-                            --button1-action "${ctrl_bin} previous" \
-                            --button2 "$play_btn" \
-                            --button2-action "${ctrl_bin} play-pause" \
-                            --button3 "⏭ Next" \
-                            --button3-action "${ctrl_bin} next" >/dev/null 2>&1 || true
-                    fi
-                done < "${TERMUX_TMP}/spotx-media.fifo" 2>/dev/null || true
+                    run_with_timeout 2 termux-notification \
+                        --id "$PLAYER_NOTIFICATION_ID" \
+                        --title "$local_title" \
+                        --content "$artist" \
+                        --icon "audiotrack" \
+                        --alert-once \
+                        --priority max \
+                        --button1 "⏮ Prev" \
+                        --button1-action "${ctrl_bin} previous" \
+                        --button2 "$play_btn" \
+                        --button2-action "${ctrl_bin} play-pause" \
+                        --button3 "⏭ Next" \
+                        --button3-action "${ctrl_bin} next" >/dev/null 2>&1 || true
+                done < "$MEDIA_FIFO" 2>/dev/null || true
                 sleep 0.2
             done
         ) &
@@ -380,7 +285,7 @@ fi
 # 6. Execute Spotify inside PRoot Ubuntu container in background
 echo -e "${GREEN}${BOLD}[OK] Starting Spotify in Ubuntu container...${CLR}"
 # Filter known PRoot futex warnings that occur when threads are killed
-proot-distro login ubuntu --shared-tmp -- env DISPLAY=:0 PULSE_SERVER=tcp:127.0.0.1:4713 /usr/local/bin/spotify-termux "$@" 2> >(grep -v "The futex facility returned an unexpected error code" >&2) &
+proot-distro login "$CONTAINER_NAME" --shared-tmp -- env DISPLAY=:0 PULSE_SERVER=tcp:127.0.0.1:4713 /usr/local/bin/spotify-termux "$@" 2> >(grep -v "The futex facility returned an unexpected error code" >&2) &
 SPOTIFY_PID=$!
 
 # Wait for Spotify process to finish
