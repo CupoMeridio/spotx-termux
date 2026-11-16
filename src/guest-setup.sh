@@ -201,69 +201,120 @@ if command -v dpkg-divert >/dev/null 2>&1; then
     chmod +x /usr/bin/systemctl 2>/dev/null || true
 fi
 
-# 1. Update APT lists and install fundamental utilities
-# (apt-get install is inherently idempotent — fast if packages exist)
+# 1. Update APT lists and install dependencies
+# ---------------------------------------------------------------------------
+# apt-get installs a package list all-or-nothing: one renamed or missing package
+# (e.g. the Ubuntu 24.04 "t64" transition) makes the whole call fail. Packages are
+# therefore split by importance and installed through apt_install_set, which:
+#   - resolves alternatives written as "new|old" (first installable name wins);
+#   - keeps the fast path (one apt-get call per group);
+#   - on failure, isolates the unavailable packages and installs the rest;
+#   - aborts for a missing REQUIRED package, only warns for an OPTIONAL one.
+# ---------------------------------------------------------------------------
+apt_installable() {
+    # A dry run also resolves virtual packages provided by exactly one real package
+    apt-get install -s -qq --no-install-recommends "$1" >/dev/null 2>&1
+}
+
+# apt_install_set <required|optional> <description> <package|alt1|alt2...>...
+apt_install_set() {
+    local mode="$1" what="$2"
+    shift 2
+    local entry alt chosen pkg
+    local -a alts=() pkgs=() good=() missing=()
+
+    for entry in "$@"; do
+        if [[ "$entry" == *"|"* ]]; then
+            chosen=""
+            IFS='|' read -r -a alts <<< "$entry"
+            for alt in "${alts[@]}"; do
+                if apt_installable "$alt"; then
+                    chosen="$alt"
+                    break
+                fi
+            done
+            if [ -n "$chosen" ]; then pkgs+=("$chosen"); else missing+=("${entry//|/ or }"); fi
+        else
+            pkgs+=("$entry")
+        fi
+    done
+
+    info "Installing ${what}..."
+    if [ ${#pkgs[@]} -gt 0 ] && ! apt-get install -y --no-install-recommends "${pkgs[@]}"; then
+        warn "Installing ${what} as a group failed; isolating the problematic packages..."
+        for pkg in "${pkgs[@]}"; do
+            if apt_installable "$pkg"; then good+=("$pkg"); else missing+=("$pkg"); fi
+        done
+        if [ ${#good[@]} -gt 0 ] && ! apt-get install -y --no-install-recommends "${good[@]}"; then
+            # Dependencies conflict only in combination: fall back to one package at a time
+            for pkg in "${good[@]}"; do
+                apt-get install -y --no-install-recommends "$pkg" || missing+=("$pkg")
+            done
+        fi
+    fi
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        if [ "$mode" = "required" ]; then
+            error "Required packages could not be installed: ${missing[*]}"
+            error "Spotify cannot run without them. Check the network / Ubuntu mirrors and retry."
+            exit 1
+        fi
+        warn "Optional packages not installed: ${missing[*]}"
+        warn "Spotify will still run; the related features may be unavailable."
+    fi
+}
+
 info "Updating container package sources..."
 apt-get update -y
 
-info "Installing base utilities and build/unpack tools..."
-apt-get install -y --no-install-recommends \
-    curl \
-    wget \
-    gpg \
-    tar \
-    xz-utils \
-    binutils \
-    perl \
-    zip \
-    unzip \
-    procps \
-    ca-certificates
+# Tools used by this script (ar/tar/xz to unpack the .deb, curl/gpg for repositories)
+# and by SpotX-Bash (perl, zip, unzip)
+apt_install_set required "base utilities and unpack tools" \
+    curl wget gpg tar xz-utils binutils perl zip unzip procps ca-certificates
 
-# 2. Install shared GUI, audio, and Electron/Chromium runtime dependencies
-info "Installing GUI, audio, and Electron runtime dependencies..."
-apt-get install -y --no-install-recommends \
-    libgl1-mesa-dri \
-    libgl1 \
+# Libraries the Electron/Chromium runtime of Spotify cannot start without,
+# plus fonts (no text otherwise) and the PulseAudio client library (no audio otherwise)
+apt_install_set required "core GUI, audio and Electron runtime libraries" \
     libnss3 \
     libnspr4 \
-    libatk-bridge2.0-0 \
-    libsm6 \
-    libice6 \
+    libgbm1 \
+    libgl1 \
+    libgl1-mesa-dri \
+    libxkbcommon0 \
     libxss1 \
     libxtst6 \
     libxshmfence1 \
     libxcomposite1 \
     libxdamage1 \
     libxrandr2 \
-    libsecret-1-0 \
-    libatomic1 \
-    libgbm1 \
+    libdbus-1-3 \
+    "libasound2t64|libasound2" \
+    "libgtk-3-0t64|libgtk-3-0" \
+    "libatk-bridge2.0-0t64|libatk-bridge2.0-0" \
+    fonts-dejavu-core \
+    pulseaudio-utils
+
+# Features that degrade gracefully when missing
+apt_install_set optional "optional integration libraries" \
+    matchbox-window-manager \
+    dbus-x11 \
+    playerctl \
     libayatana-appindicator3-1 \
     libayatana-appindicator-glib2 \
-    libdbus-1-3 \
-    dbus-x11 \
+    libnotify4 \
+    libsecret-1-0 \
+    libsm6 \
+    libice6 \
+    libatomic1 \
+    libpci3 \
+    libudev1 \
     libva2 \
     libva-drm2 \
     libva-x11-2 \
-    libnotify4 \
-    libpci3 \
     libvulkan1 \
     mesa-vulkan-drivers \
-    libxkbcommon0 \
     xdg-utils \
-    fonts-dejavu-core \
-    matchbox-window-manager \
-    pulseaudio-utils \
-    playerctl || true
-
-# Install transitional/architecture libraries (handling Ubuntu 24.04 64-bit time_t suffix)
-apt-get install -y --no-install-recommends \
-    libasound2t64 libgtk-3-0t64 libcups2t64 2>/dev/null || \
-apt-get install -y --no-install-recommends \
-    libasound2 libgtk-3-0 libcups2 2>/dev/null || true
-
-apt-get install -y --no-install-recommends libudev1 2>/dev/null || true
+    "libcups2t64|libcups2"
 
 # Ensure D-Bus machine ID exists (required for dbus-launch inside containers)
 if command -v dbus-uuidgen >/dev/null 2>&1; then
