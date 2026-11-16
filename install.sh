@@ -33,7 +33,7 @@ if [ -z "$_SPOTX_LIB" ]; then
 fi
 
 if [ -f "$_SPOTX_LIB" ]; then
-    # shellcheck source=/dev/null
+    # shellcheck source=src/common.sh
     source "$_SPOTX_LIB"
 else
     echo "[X] Error: Could not load SpotX-Termux core library (network or GitHub error)." >&2

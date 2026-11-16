@@ -21,7 +21,7 @@ if [ -z "$_SPOTX_LIB" ] && [ -f "${HOME}/.spotx-termux/common.sh" ]; then
     _SPOTX_LIB="${HOME}/.spotx-termux/common.sh"
 fi
 if [ -n "$_SPOTX_LIB" ] && [ -f "$_SPOTX_LIB" ]; then
-    # shellcheck source=/dev/null
+    # shellcheck source=common.sh
     source "$_SPOTX_LIB"
 fi
 
@@ -33,7 +33,7 @@ if [ "${SPOTX_LIB_API:-0}" -lt 4 ]; then
     _fresh_lib="${PREFIX:-/data/data/com.termux/files/usr}/tmp/spotx-common.update.$$.sh"
     if curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/common.sh?t=$(date +%s)" -o "$_fresh_lib" 2>/dev/null \
         && [ "$(head -c 2 "$_fresh_lib" 2>/dev/null)" = "#!" ]; then
-        # shellcheck source=/dev/null
+        # shellcheck source=common.sh
         source "$_fresh_lib"
         rm -f "$_fresh_lib"
     else

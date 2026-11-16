@@ -26,7 +26,7 @@ if [ -z "$_SPOTX_LIB" ] || [ ! -f "$_SPOTX_LIB" ]; then
     echo "    Please run 'bash ~/update-spotify.sh' or 'bash install.sh' to repair." >&2
     exit 1
 fi
-# shellcheck source=/dev/null
+# shellcheck source=common.sh
 source "$_SPOTX_LIB"
 if [ "${SPOTX_LIB_API:-1}" -lt 2 ]; then
     echo "[X] Error: the installed SpotX-Termux library is outdated (${_SPOTX_LIB})." >&2

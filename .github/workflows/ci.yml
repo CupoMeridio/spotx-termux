@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax check (bash -n)
+        run: |
+          status=0
+          for f in install.sh uninstall.sh src/*.sh src/guest/*.sh tests/*.sh; do
+            bash -n "$f" || { echo "::error file=$f::bash syntax error"; status=1; }
+          done
+          exit $status
+
+      - name: ShellCheck
+        # Preinstalled on ubuntu-latest; configuration in .shellcheckrc
+        run: |
+          shellcheck --version
+          shellcheck --severity=warning install.sh uninstall.sh src/*.sh src/guest/*.sh tests/*.sh
+
+      - name: Test suite
+        run: bash tests/run-tests.sh

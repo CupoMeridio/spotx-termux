@@ -7,6 +7,9 @@
 # uninstall). It must stay free of side effects other than defining variables
 # and functions. guest-setup.sh runs inside the container and does NOT use it.
 # ==============================================================================
+# Library: many variables here (colors, paths, tables) are only read by the
+# scripts that source it, so "assigned but unused" does not apply to this file.
+# shellcheck disable=SC2034
 
 # Bumped whenever scripts start relying on new functions from this library, so a
 # script loaded together with an older installed copy can detect the mismatch.

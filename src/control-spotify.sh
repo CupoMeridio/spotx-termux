@@ -32,7 +32,7 @@ if [ -z "$_SPOTX_LIB" ] || [ ! -f "$_SPOTX_LIB" ]; then
     echo "    Please run 'bash ~/update-spotify.sh' or 'bash install.sh' to repair." >&2
     exit 1
 fi
-# shellcheck source=/dev/null
+# shellcheck source=common.sh
 source "$_SPOTX_LIB"
 
 show_help() {
