@@ -308,6 +308,11 @@ assert_eq "one-liner re-runs the installer of the tagged release" "TAGGED-INSTAL
 out="$(new_sandbox; make_fake_github 2026.12.01; unset SPOTX_REPO_REF
        bash -c "$(cat "$REPO/install.sh")" install.sh --version 2>&1)"
 assert_eq "no tag yet: installs from main as before" "SpotX-Termux 2026.12.01" "$out"
+out="$(new_sandbox; make_fake_github 2026.12.01; unset SPOTX_REPO_REF
+       printf '#!/usr/bin/env bash\necho "INSTALLED-UNINSTALLER args=$*"\n' > "$HOME/uninstall-spotify.sh"
+       rm -f "$SANDBOX/gh/main/uninstall.sh"   # GitHub copy unavailable (offline)
+       bash -c "$(cat "$REPO/install.sh")" install.sh --uninstall --full 2>&1)"
+assert_eq "--uninstall prefers the installed uninstaller (works offline)" "INSTALLED-UNINSTALLER args=--full" "$out"
 
 # ==============================================================================
 # start-spotify.sh: single-session guard

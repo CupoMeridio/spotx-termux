@@ -109,7 +109,8 @@ if [ "${1:-}" = "--probe" ]; then
     else
         echo "GUEST_BOX64_VER="
     fi
-    if grep -Eq "^BOX64_INPROCESSGPU=0" /etc/box64.box64rc /root/.box64rc 2>/dev/null; then
+    # Tolerate hand-edited rc files ("BOX64_INPROCESSGPU = 0"), like the sed fix-up below
+    if grep -Eq "^[[:space:]]*BOX64_INPROCESSGPU[[:space:]]*=[[:space:]]*0[[:space:]]*$" /etc/box64.box64rc /root/.box64rc 2>/dev/null; then
         echo "GUEST_BOX64_GPU=0"
     else
         echo "GUEST_BOX64_GPU=other"

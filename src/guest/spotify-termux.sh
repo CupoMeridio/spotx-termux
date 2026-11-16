@@ -61,13 +61,20 @@ if command -v playerctl >/dev/null 2>&1; then
             sleep 0.5
         done
         if playerctl -p spotify status >/dev/null 2>&1; then
+            WRITER_PID=""
             playerctl -p spotify metadata --format '{{status}}:::{{artist}}:::{{title}}' --follow 2>/dev/null | while IFS= read -r line; do
                 [ -z "$line" ] && continue
                 echo "$line" > /tmp/spotx-media.status.tmp 2>/dev/null && mv -f /tmp/spotx-media.status.tmp /tmp/spotx-media.status 2>/dev/null || true
                 if [ -p /tmp/spotx-media.fifo ]; then
-                    # Opening a FIFO blocks until a reader appears: bound the wait so a
-                    # missing host bridge cannot leave one stuck process per track change
-                    ( timeout 5 sh -c 'echo "$1" > /tmp/spotx-media.fifo' _ "$line" 2>/dev/null & )
+                    # Opening a FIFO blocks until a reader appears. At most one writer is
+                    # pending: a newer update replaces the previous one (its metadata is
+                    # stale anyway; timeout forwards the TERM to its child), and the 5s
+                    # bound means a missing host bridge never leaves processes behind.
+                    if [ -n "$WRITER_PID" ]; then
+                        kill "$WRITER_PID" 2>/dev/null || true
+                    fi
+                    timeout 5 sh -c 'echo "$1" > /tmp/spotx-media.fifo' _ "$line" 2>/dev/null &
+                    WRITER_PID=$!
                 fi
             done
         fi

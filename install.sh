@@ -63,8 +63,11 @@ fi
 # ------------------------------------------------------------------------------
 if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "-u" ]; then
     shift
+    # Same order as --doctor: repo checkout, installed copy (works offline), GitHub
     if [ -n "$SPOTX_REPO_ROOT" ]; then
         exec bash "${SPOTX_REPO_ROOT}/uninstall.sh" "$@"
+    elif [ -f "${HOME}/uninstall-spotify.sh" ]; then
+        exec bash "${HOME}/uninstall-spotify.sh" "$@"
     else
         exec bash <(curl -fsSL "${SPOTX_REPO_RAW}/uninstall.sh?t=$(date +%s)") "$@"
     fi
