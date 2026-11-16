@@ -38,7 +38,9 @@ info "Detected architecture inside container: ${ARCH}"
 # Sets: LATEST_VER, PKG_PATH, PKG_SHA256
 # ---------------------------------------------------------------------------
 resolve_latest_spotify() {
-    PACKAGES_DATA=$(curl -sSL https://repository.spotify.com/dists/stable/non-free/binary-amd64/Packages)
+    # -f: treat HTTP errors as failures instead of parsing an error page.
+    # On failure the variables stay empty; callers handle that (PKG_PATH check / "unknown").
+    PACKAGES_DATA=$(curl -fsSL https://repository.spotify.com/dists/stable/non-free/binary-amd64/Packages 2>/dev/null || true)
     PKG_PATH=$(awk '/^Package: spotify-client$/{p=1} p && /^Filename:/{print $2; exit}' <<< "$PACKAGES_DATA")
     LATEST_VER=$(awk '/^Package: spotify-client$/{p=1} p && /^Version:/{print $2; exit}' <<< "$PACKAGES_DATA")
     PKG_SHA256=$(awk '/^Package: spotify-client$/{p=1} p && /^SHA256:/{print $2; exit}' <<< "$PACKAGES_DATA")
@@ -299,7 +301,7 @@ case "$ARCH" in
         else
             info "Running on native x86_64. Configuring Spotify official APT repository..."
             mkdir -p /etc/apt/trusted.gpg.d /etc/apt/sources.list.d
-            curl -sS https://download.spotify.com/debian/pubkey_6224F9941A8AA6D1.gpg | \
+            curl -fsS https://download.spotify.com/debian/pubkey_6224F9941A8AA6D1.gpg | \
                 gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/spotify.gpg
             echo "deb https://repository.spotify.com stable non-free" > /etc/apt/sources.list.d/spotify.list
             apt-get update -y
@@ -384,7 +386,11 @@ case "$ARCH" in
                 SPOTIFY_URL="https://repository.spotify.com/${PKG_PATH}"
                 info "Downloading Spotify client: ${SPOTIFY_URL}"
                 TEMP_DIR=$(mktemp -d)
-                curl -sSL "$SPOTIFY_URL" -o "${TEMP_DIR}/spotify.deb"
+                if ! curl -fsSL "$SPOTIFY_URL" -o "${TEMP_DIR}/spotify.deb"; then
+                    error "Failed to download Spotify package from ${SPOTIFY_URL}"
+                    rm -rf "$TEMP_DIR"
+                    exit 1
+                fi
 
                 # Verify package integrity using SHA256 from repository metadata
                 if [ -n "${PKG_SHA256:-}" ]; then
@@ -514,28 +520,39 @@ else
     SPOTX_CLEAN_VER="${SPOTX_CLEAN_VER%%.g*}"
 
     SPOTX_SCRIPT_TMP=$(mktemp)
-    curl -sSL https://raw.githubusercontent.com/SpotX-Official/SpotX-Bash/main/spotx.sh -o "$SPOTX_SCRIPT_TMP"
+    # Download failures must not abort setup: the container runner below still has to be generated.
+    if curl -fsSL https://raw.githubusercontent.com/SpotX-Official/SpotX-Bash/main/spotx.sh -o "$SPOTX_SCRIPT_TMP" 2>/dev/null \
+        && [ "$(head -c 2 "$SPOTX_SCRIPT_TMP" 2>/dev/null)" = "#!" ]; then
 
-    SPOTX_ARGS=(--noninteractive -f -c -P /usr/share/spotify)
-    if [ -n "$SPOTX_CLEAN_VER" ]; then
-        SPOTX_ARGS+=(-F "$SPOTX_CLEAN_VER")
-    fi
+        SPOTX_ARGS=(--noninteractive -f -c -P /usr/share/spotify)
+        if [ -n "$SPOTX_CLEAN_VER" ]; then
+            SPOTX_ARGS+=(-F "$SPOTX_CLEAN_VER")
+        fi
 
-    # Kill any lingering Spotify processes before patching
-    pkill -9 -f "spotify" 2>/dev/null || true
+        # Kill any lingering Spotify processes before patching.
+        # Patterns must stay narrow: PRoot shares /proc with the Termux host, so a broad
+        # 'pkill -f spotify' would also match and kill the host updater (update-spotify.sh)
+        # that is running this very script.
+        pkill -9 -f "/usr/share/spotify/spotify" 2>/dev/null || true
+        pkill -9 -f "/usr/local/bin/spotify-termux" 2>/dev/null || true
+        pkill -9 -x spotify 2>/dev/null || true
 
-    # SPOTX_BUILD_MODE=1 prevents complex multi-user stagedInstall/chown/mktemp rollbacks
-    # that fail inside rootless PRoot containers on Android
-    SPOTX_BUILD_MODE=1 bash "$SPOTX_SCRIPT_TMP" "${SPOTX_ARGS[@]}" || {
-        warn "SpotX non-interactive script returned non-zero. Checking patched files..."
-    }
-    rm -f "$SPOTX_SCRIPT_TMP"
+        # SPOTX_BUILD_MODE=1 prevents complex multi-user stagedInstall/chown/mktemp rollbacks
+        # that fail inside rootless PRoot containers on Android
+        SPOTX_BUILD_MODE=1 bash "$SPOTX_SCRIPT_TMP" "${SPOTX_ARGS[@]}" || {
+            warn "SpotX non-interactive script returned non-zero. Checking patched files..."
+        }
 
-    if is_spotx_applied; then
-        success "SpotX patch successfully applied to xpui.spa!"
+        if is_spotx_applied; then
+            success "SpotX patch successfully applied to xpui.spa!"
+        else
+            warn "SpotX patch was not detected in xpui.spa. Spotify will run with stock UI."
+        fi
     else
-        warn "SpotX patch was not detected in xpui.spa. Spotify will run with stock UI."
+        warn "Could not download a valid SpotX-Bash script (network or GitHub error)."
+        warn "Spotify will run with stock UI. Retry later with: spotify-update --spotx-only"
     fi
+    rm -f "$SPOTX_SCRIPT_TMP"
 fi
 
 # 6. Create custom runner inside container (/usr/local/bin/spotify-termux)

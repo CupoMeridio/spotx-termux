@@ -30,7 +30,14 @@ fi
 # shellcheck source=/dev/null
 source "$_SPOTX_LIB"
 
-
+# Fallbacks for an older installed common.sh: when upgrading, this script may run
+# with the previous library loaded, which does not yet define the validators.
+if ! declare -F is_valid_script >/dev/null; then
+    is_valid_script() { [ -s "$1" ] && [ "$(head -c 2 "$1" 2>/dev/null)" = "#!" ]; }
+fi
+if ! declare -F is_valid_version >/dev/null; then
+    is_valid_version() { [[ "${1:-}" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]]; }
+fi
 
 show_help() {
     cat << EOF
@@ -144,8 +151,10 @@ get_latest_spotx_version() {
         fi
     fi
     if [ -z "$ver" ] || [ "$ver" = "unknown" ]; then
-        ver=$(curl -sSL --connect-timeout 2 --max-time 4 "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/VERSION?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
+        ver=$(curl -fsSL --connect-timeout 2 --max-time 4 "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/VERSION?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
     fi
+    # Reject anything that is not CalVer (e.g. an error body like "404:NotFound")
+    is_valid_version "$ver" || ver=""
     echo "${ver:-unknown}"
 }
 
@@ -174,7 +183,7 @@ get_installed_spotify_version() {
 # Helper: fetch latest Spotify client version from Debian repository metadata
 get_latest_spotify_version() {
     local ver=""
-    ver=$(curl -sSL --connect-timeout 3 --max-time 6 https://repository.spotify.com/dists/stable/non-free/binary-amd64/Packages 2>/dev/null | \
+    ver=$(curl -fsSL --connect-timeout 3 --max-time 6 https://repository.spotify.com/dists/stable/non-free/binary-amd64/Packages 2>/dev/null | \
         awk '/^Package: spotify-client$/{p=1} p && /^Version:/{print $2; exit}' || true)
     echo "${ver:-unknown}"
 }
@@ -405,7 +414,12 @@ if [ -n "$GUEST_SETUP_LOCAL" ] && [ -f "$GUEST_SETUP_LOCAL" ]; then
     cp "$GUEST_SETUP_LOCAL" "$CONTAINER_SETUP_STAGING"
 else
     info "Fetching latest guest setup script from repository..."
-    curl -sSL "${REMOTE_REPO_RAW}?t=$(date +%s)" -o "$CONTAINER_SETUP_STAGING"
+    if ! curl -fsSL "${REMOTE_REPO_RAW}?t=$(date +%s)" -o "$CONTAINER_SETUP_STAGING" \
+        || ! is_valid_script "$CONTAINER_SETUP_STAGING"; then
+        error "Could not download a valid guest setup script (network or GitHub error)."
+        error "No changes were made. Please retry later: spotify-update"
+        exit 1
+    fi
 fi
 chmod +x "$CONTAINER_SETUP_STAGING"
 
@@ -455,14 +469,16 @@ sync_host_script() {
     if [ -n "$local_file" ] && [ -f "$local_file" ]; then
         cp "$local_file" "$tmp_file"
     else
-        curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/${remote_rel}?t=$(date +%s)" -o "$tmp_file" 2>/dev/null || true
+        curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/${remote_rel}?t=$(date +%s)" -o "$tmp_file" 2>/dev/null || true
     fi
 
-    if [ -s "$tmp_file" ]; then
+    # Only replace the installed file with a real script (never an HTTP error page)
+    if is_valid_script "$tmp_file"; then
         chmod +x "$tmp_file" 2>/dev/null || true
         mv -f "$tmp_file" "$dest_file"
     else
         rm -f "$tmp_file" 2>/dev/null || true
+        warn "Could not fetch a valid copy of ${remote_rel}; keeping the installed version."
     fi
 }
 

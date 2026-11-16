@@ -103,6 +103,62 @@ if ! command -v proot-distro > /dev/null 2>&1; then
     exit 1
 fi
 
+# ------------------------------------------------------------------------------
+# Single-session guard
+# A second launch (e.g. a double tap on the widget) must not start another
+# instance: the duplicate Spotify would exit immediately and this script's EXIT
+# trap would then tear down the session that is already playing.
+# ------------------------------------------------------------------------------
+SESSION_LOCK="${TERMUX_TMP}/spotx-session.pid"
+
+session_owner_alive() {
+    local pid=""
+    pid="$(cat "$SESSION_LOCK" 2>/dev/null || true)"
+    [ -n "$pid" ] && [ "$pid" != "$$" ] || return 1
+    kill -0 "$pid" 2>/dev/null || return 1
+    # Guard against PID reuse: the owner must still be a SpotX launcher
+    tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null | grep -qi "spotify"
+}
+
+acquire_session_lock() {
+    mkdir -p "$TERMUX_TMP"
+    # noclobber makes the create atomic: only one concurrent launcher can win
+    if ( set -o noclobber; echo "$$" > "$SESSION_LOCK" ) 2>/dev/null; then
+        return 0
+    fi
+    session_owner_alive && return 1
+    # Stale lock left by a launcher killed with SIGKILL: take it over
+    rm -f "$SESSION_LOCK"
+    ( set -o noclobber; echo "$$" > "$SESSION_LOCK" ) 2>/dev/null
+}
+
+release_session_lock() {
+    if [ "$(cat "$SESSION_LOCK" 2>/dev/null || true)" = "$$" ]; then
+        rm -f "$SESSION_LOCK"
+    fi
+}
+
+spotify_process_running() {
+    pgrep -x "spotify" > /dev/null 2>&1 || pgrep -f "/usr/share/spotify/spotify" > /dev/null 2>&1
+}
+
+focus_running_session() {
+    echo -e "${CYAN}${BOLD}[*] Spotify is already running: bringing Termux-X11 to foreground.${CLR}"
+    echo -e "${DIM}    To restart it cleanly, run: spotify-stop && spotify${CLR}"
+    am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || true
+    exit 0
+}
+
+if ! acquire_session_lock; then
+    focus_running_session
+fi
+# Spotify still alive without a live launcher (e.g. launcher was SIGKILLed): do not
+# start a duplicate either, just show the existing window.
+if spotify_process_running; then
+    release_session_lock
+    focus_running_session
+fi
+
 echo -e "${CYAN}${BOLD}[*] Launching SpotX Spotify on Android Termux...${CLR}"
 
 # 0. Acquire Termux Wake-Lock to prevent Android CPU sleep when screen is off
@@ -125,17 +181,16 @@ high-priority = yes
 realtime-scheduling = no
 PULSE_CONF
 
-# If Spotify is not actively running, ensure PulseAudio daemon is reloaded with optimal configuration
-if ! pgrep -x "spotify" > /dev/null 2>&1 && ! pgrep -f "/usr/share/spotify/spotify" > /dev/null 2>&1; then
-    pulseaudio -k 2>/dev/null || pkill -x pulseaudio 2>/dev/null || true
-    for ((k=1; k<=10; k++)); do
-        if ! pgrep -x pulseaudio >/dev/null 2>&1; then
-            break
-        fi
-        sleep 0.1
-    done
-    pkill -9 -x pulseaudio 2>/dev/null || true
-fi
+# Spotify is guaranteed not to be running here (single-session guard above), so
+# reload the PulseAudio daemon to pick up the optimal configuration
+pulseaudio -k 2>/dev/null || pkill -x pulseaudio 2>/dev/null || true
+for ((k=1; k<=10; k++)); do
+    if ! pgrep -x pulseaudio >/dev/null 2>&1; then
+        break
+    fi
+    sleep 0.1
+done
+pkill -9 -x pulseaudio 2>/dev/null || true
 
 if ! pgrep -x "pulseaudio" > /dev/null 2>&1; then
     echo -e "${CYAN}[+] Starting PulseAudio daemon with OpenSL ES sink...${CLR}"
@@ -150,12 +205,10 @@ else
 fi
 
 # 2. Termux-X11 Display Server (:0)
-# If Spotify is not actively running, ensure any stale/frozen Termux-X11 instance is cleared
-if ! pgrep -x "spotify" > /dev/null 2>&1 && ! pgrep -f "/usr/share/spotify/spotify" > /dev/null 2>&1; then
-    pkill -f "termux.x11" 2>/dev/null || true
-    pkill -f "termux-x11" 2>/dev/null || true
-    sleep 0.2
-fi
+# Spotify is not running (single-session guard), so clear any stale/frozen Termux-X11 instance
+pkill -f "termux.x11" 2>/dev/null || true
+pkill -f "termux-x11" 2>/dev/null || true
+sleep 0.2
 
 if ! pgrep -f "termux.x11" > /dev/null 2>&1 && ! pgrep -f "termux-x11" > /dev/null 2>&1; then
     # Clear stale X11 sockets/locks only if server is not already running
@@ -235,6 +288,8 @@ cleanup() {
 
     # Restore terminal mode
     stty sane 2>/dev/null || true
+
+    release_session_lock
 
     echo -e "${GREEN}${BOLD}[OK] SpotX Spotify closed cleanly.${CLR}"
     exit 0

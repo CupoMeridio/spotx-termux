@@ -22,8 +22,14 @@ if [ -z "$_SPOTX_LIB" ]; then
     TMP_BOOTSTRAP_DIR="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
     mkdir -p "$TMP_BOOTSTRAP_DIR" 2>/dev/null || true
     _SPOTX_LIB="${TMP_BOOTSTRAP_DIR}/spotx-common.sh"
-    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/common.sh?t=$(date +%s)" -o "$_SPOTX_LIB" 2>/dev/null || true
-    curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/VERSION?t=$(date +%s)" -o "${TMP_BOOTSTRAP_DIR}/VERSION" 2>/dev/null || true
+    rm -f "$_SPOTX_LIB" "${TMP_BOOTSTRAP_DIR}/VERSION" 2>/dev/null || true
+    # -f: never save an HTTP error page as the library. Validation can't use common.sh yet.
+    if ! curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/common.sh?t=$(date +%s)" -o "$_SPOTX_LIB" 2>/dev/null \
+        || [ "$(head -c 2 "$_SPOTX_LIB" 2>/dev/null)" != "#!" ]; then
+        rm -f "$_SPOTX_LIB" 2>/dev/null || true
+    fi
+    curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/VERSION?t=$(date +%s)" -o "${TMP_BOOTSTRAP_DIR}/VERSION" 2>/dev/null \
+        || rm -f "${TMP_BOOTSTRAP_DIR}/VERSION" 2>/dev/null || true
 fi
 
 if [ -f "$_SPOTX_LIB" ]; then
@@ -40,7 +46,7 @@ if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "-u" ]; then
     if [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/uninstall.sh" ]; then
         exec bash "${SCRIPT_DIR}/uninstall.sh" "$@"
     else
-        exec bash <(curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/uninstall.sh?t=$(date +%s)") "$@"
+        exec bash <(curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/uninstall.sh?t=$(date +%s)") "$@"
     fi
 fi
 
@@ -275,7 +281,13 @@ if [ -n "$GUEST_SETUP_LOCAL" ] && [ -f "$GUEST_SETUP_LOCAL" ]; then
     cp "$GUEST_SETUP_LOCAL" "$CONTAINER_SETUP_STAGING"
 else
     info "Fetching guest setup script from repository: ${REMOTE_REPO_RAW}"
-    curl -sSL "${REMOTE_REPO_RAW}?t=$(date +%s)" -o "$CONTAINER_SETUP_STAGING"
+    if ! curl -fsSL "${REMOTE_REPO_RAW}?t=$(date +%s)" -o "$CONTAINER_SETUP_STAGING" \
+        || ! is_valid_script "$CONTAINER_SETUP_STAGING"; then
+        rm -f "$CONTAINER_SETUP_STAGING"
+        error "Could not download a valid guest setup script (network or GitHub error)."
+        error "Please check your connection and run the installer again."
+        exit 1
+    fi
 fi
 chmod +x "$CONTAINER_SETUP_STAGING"
 
@@ -305,14 +317,16 @@ install_host_script() {
     elif [ -n "${_SPOTX_LIB:-}" ] && [ "$local_rel" = "common.sh" ] && [ -f "$_SPOTX_LIB" ]; then
         cp "$_SPOTX_LIB" "$tmp_file"
     else
-        curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/${remote_rel}?t=$(date +%s)" -o "$tmp_file" 2>/dev/null || true
+        curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/${remote_rel}?t=$(date +%s)" -o "$tmp_file" 2>/dev/null || true
     fi
 
-    if [ -s "$tmp_file" ]; then
+    # Only replace the installed file with a real script (never an HTTP error page)
+    if is_valid_script "$tmp_file"; then
         chmod +x "$tmp_file" 2>/dev/null || true
         mv -f "$tmp_file" "$dest_file"
     else
         rm -f "$tmp_file" 2>/dev/null || true
+        warn "Could not fetch a valid copy of ${remote_rel}; keeping the existing file (if any)."
     fi
 }
 
@@ -393,7 +407,7 @@ chmod +x "${SHORTCUTS_DIR}/Spotify-Stop"
 
 # Download Spotify icon for Termux:Widget from the project repository
 info "Downloading icon for Termux:Widget..."
-curl -sSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/spotify-icon.png?t=$(date +%s)" -o "${ICONS_DIR}/Spotify.png" 2>/dev/null || true
+curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/spotify-icon.png?t=$(date +%s)" -o "${ICONS_DIR}/Spotify.png" 2>/dev/null || true
 cp "${ICONS_DIR}/Spotify.png" "${ICONS_DIR}/Spotify-Stop.png" 2>/dev/null || true
 success "Termux:Widget shortcuts created: 'Spotify' and 'Spotify-Stop'"
 

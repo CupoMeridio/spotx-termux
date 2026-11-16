@@ -60,6 +60,19 @@ resolve_spotx_version() {
 SPOTX_TERMUX_VERSION="$(resolve_spotx_version)"
 
 # ------------------------------------------------------------------------------
+# 3b. Download Validation Helpers
+# A fetched file must pass these checks before it replaces anything installed,
+# so that an HTTP error page (404 / rate limit) is never installed as a script.
+# ------------------------------------------------------------------------------
+is_valid_script() {
+    [ -s "$1" ] && [ "$(head -c 2 "$1" 2>/dev/null)" = "#!" ]
+}
+
+is_valid_version() {
+    [[ "${1:-}" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]]
+}
+
+# ------------------------------------------------------------------------------
 # 4. ANSI Color Definitions
 # ------------------------------------------------------------------------------
 CLR='\033[0m'

@@ -257,7 +257,7 @@ action_revert_spotx() {
             echo "[OK] xpui.spa successfully restored!"
         else
             echo "[*] Downloading SpotX-Bash official uninstaller..."
-            curl -sSL https://raw.githubusercontent.com/SpotX-Official/SpotX-Bash/main/spotx.sh | bash -s -- --uninstall -P /usr/share/spotify || true
+            curl -fsSL https://raw.githubusercontent.com/SpotX-Official/SpotX-Bash/main/spotx.sh | bash -s -- --uninstall -P /usr/share/spotify || true
         fi
     '
 
