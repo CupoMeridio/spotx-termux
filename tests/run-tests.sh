@@ -113,10 +113,10 @@ section "common.sh: version_gt"
     new_sandbox; load_common
     for c in "2026.11.16>2026.10.11" "2026.10.11.1>2026.10.11" "2026.10.11.10>2026.10.11.9" \
              "2026.10.11<2026.10.11.1" "2026.10.11=2026.10.11" "2026.09.30<2026.10.01"; do
-        if [[ "$c" == *">"* ]]; then a="${c%%>*}"; b="${c#*>}"; want=0
-        elif [[ "$c" == *"<"* ]]; then a="${c%%<*}"; b="${c#*<}"; want=1
-        else a="${c%%=*}"; b="${c#*=}"; want=1; fi
-        version_gt "$a" "$b"; got=$?
+        if [[ "$c" == *">"* ]]; then left="${c%%>*}"; right="${c#*>}"; want=0
+        elif [[ "$c" == *"<"* ]]; then left="${c%%<*}"; right="${c#*<}"; want=1
+        else left="${c%%=*}"; right="${c#*=}"; want=1; fi
+        version_gt "$left" "$right"; got=$?
         [ "$got" = "$want" ] && echo "ok $c" || echo "FAIL $c"
     done
 ) > "$WORK/out.txt"
@@ -127,11 +127,12 @@ done < "$WORK/out.txt"
 section "common.sh: version markers"
 out="$(
     new_sandbox; load_common
+    echo "2026.01.01" > "$HOME/.spotx-termux-version"   # legacy marker of older installs
     write_version_markers "2026.11.16"
     write_version_markers "404:NotFound"   # must be ignored
-    echo "$(cat "$HOME/.spotx-termux-version") $(cat "$SPOTX_DIR/VERSION")"
+    echo "$(cat "$SPOTX_DIR/VERSION") legacy=$([ -e "$HOME/.spotx-termux-version" ] && echo kept || echo removed)"
 )"
-assert_eq "invalid versions are never written" "2026.11.16 2026.11.16" "$out"
+assert_eq "single marker written, invalid ignored, legacy marker migrated" "2026.11.16 legacy=removed" "$out"
 
 out="$(
     new_sandbox
@@ -255,6 +256,58 @@ out="$(
     [ -e "$SANDBOX/OLD-RAN" ] && echo "executed" || echo "refused"
 )"
 assert_eq "a guest-setup.sh without --probe support is never executed" "refused" "$out"
+
+# ==============================================================================
+# Release pinning with a fake GitHub (fake curl serving $SANDBOX/gh/<ref>/<path>)
+# ==============================================================================
+make_fake_github() { # <main VERSION> [tag VERSION]
+    local main_ver="$1" tag_ver="${2:-}"
+    mkdir -p "$SANDBOX/gh/main/src"
+    echo "$main_ver" > "$SANDBOX/gh/main/VERSION"
+    cp "$REPO/src/common.sh" "$SANDBOX/gh/main/src/common.sh"
+    if [ -n "$tag_ver" ]; then
+        mkdir -p "$SANDBOX/gh/v$tag_ver/src"
+        echo "$tag_ver" > "$SANDBOX/gh/v$tag_ver/VERSION"
+        cp "$REPO/src/common.sh" "$SANDBOX/gh/v$tag_ver/src/common.sh"
+        printf '#!/usr/bin/env bash\necho "TAGGED-INSTALLER ref=$SPOTX_REPO_REF args=$*"\n' > "$SANDBOX/gh/v$tag_ver/install.sh"
+    fi
+    cat > "$SANDBOX/fakebin/curl" <<EOF
+#!/usr/bin/env bash
+out=""; url=""
+while [ \$# -gt 0 ]; do
+    case "\$1" in
+        -o) out="\$2"; shift 2 ;;
+        --connect-timeout|--max-time) shift 2 ;;
+        -*) shift ;;
+        *) url="\$1"; shift ;;
+    esac
+done
+path="\${url%%\?*}"; path="\${path#https://fake.example/}"
+[ -f "$SANDBOX/gh/\$path" ] || exit 22
+if [ -n "\$out" ]; then cp "$SANDBOX/gh/\$path" "\$out"; else cat "$SANDBOX/gh/\$path"; fi
+EOF
+    chmod +x "$SANDBOX/fakebin/curl"
+    export SPOTX_REPO_BASE="https://fake.example"
+}
+
+section "common.sh: release pinning"
+out="$(new_sandbox; make_fake_github 2026.12.01 2026.12.01; load_common
+       echo "latest=$(latest_published_version)"
+       use_release_ref 2026.12.01 && echo "ref=$SPOTX_REPO_REF raw=${SPOTX_REPO_RAW#https://fake.example/}")"
+assert_eq "tag present: downloads pinned to it" $'latest=2026.12.01\nref=v2026.12.01 raw=v2026.12.01' "$out"
+out="$(new_sandbox; make_fake_github 2026.12.01; load_common
+       use_release_ref 2026.12.01 || echo "ref=$SPOTX_REPO_REF")"
+assert_eq "tag missing: downloads stay on main" "ref=main" "$out"
+out="$(new_sandbox; make_fake_github "404: Not Found"; load_common; latest_published_version)"
+assert_eq "invalid published VERSION is reported as unknown" "unknown" "$out"
+
+section "install.sh: bootstrap follows the release tag"
+out="$(new_sandbox; make_fake_github 2026.12.01 2026.12.01; unset SPOTX_REPO_REF
+       bash -c "$(cat "$REPO/install.sh")" install.sh --version 2>&1)"
+assert_eq "one-liner re-runs the installer of the tagged release" "TAGGED-INSTALLER ref=v2026.12.01 args=--version" "$out"
+out="$(new_sandbox; make_fake_github 2026.12.01; unset SPOTX_REPO_REF
+       bash -c "$(cat "$REPO/install.sh")" install.sh --version 2>&1)"
+assert_eq "no tag yet: installs from main as before" "SpotX-Termux 2026.12.01" "$out"
 
 # ==============================================================================
 # start-spotify.sh: single-session guard
@@ -387,8 +440,11 @@ section "guest-setup.sh: install_guest_file"
     stage_guest_bundle >/dev/null 2>&1
     error() { :; }
     eval "$(extract_functions "$REPO/src/guest-setup.sh" is_valid_guest_file install_guest_file)"
-    # shellcheck disable=SC2034  # both read by install_guest_file, loaded via eval
-    GUEST_FILES_DIR="$GUEST_STAGING_DIR/guest"; GUEST_REPO_RAW="http://127.0.0.1:9"
+    # Both read by install_guest_file, loaded via eval (invisible to shellcheck)
+    # shellcheck disable=SC2034
+    GUEST_FILES_DIR="$GUEST_STAGING_DIR/guest"
+    # shellcheck disable=SC2034
+    GUEST_REPO_RAW="http://127.0.0.1:9"
     root="$SANDBOX/root"; mkdir -p "$root"
     install_guest_file spotify-termux.sh "$root/bin/spotify-termux" 755
     cmp -s "$root/bin/spotify-termux" "$REPO/src/guest/spotify-termux.sh" && echo "runner=identical"
@@ -405,6 +461,21 @@ assert_ok "runner is executable" grep -qx "runner=executable" "$WORK/out.txt"
 assert_ok "Box64 rc installed" grep -qx "rc=installed" "$WORK/out.txt"
 assert_ok "missing file without network aborts setup" grep -qx "missing=aborted" "$WORK/out.txt"
 assert_ok "staged HTTP error page is rejected" grep -qx "errorpage=rejected" "$WORK/out.txt"
+
+section "guest: Box64 wrapper takes its settings from box64-spotify.rc"
+# Fake box64 prints the environment it receives; the wrapper runs under POSIX sh
+wrapper_env() { # <rc path> -> sorted BOX64_* environment seen by box64
+    (
+        new_sandbox
+        printf '#!/bin/sh\nenv | grep "^BOX64_" | grep -v "^BOX64_LD_LIBRARY_PATH=" | LC_ALL=C sort\n' > "$SANDBOX/fakebin/box64"
+        chmod +x "$SANDBOX/fakebin/box64"
+        SPOTX_BOX64_RC="$1" sh "$REPO/src/guest/spotify-box64-wrapper.sh"
+    )
+}
+expected="$(grep -E '^BOX64_[A-Z0-9_]+=' "$REPO/src/guest/box64-spotify.rc" | LC_ALL=C sort)"
+assert_eq "every BOX64_* line of the rc is exported" "$expected" "$(wrapper_env "$REPO/src/guest/box64-spotify.rc")"
+assert_ok "rc keeps BOX64_INPROCESSGPU=0 (Spotify zygote crash otherwise)" grep -qx 'BOX64_INPROCESSGPU=0' "$REPO/src/guest/box64-spotify.rc"
+assert_eq "rc missing: crash-safe minimum still exported" "BOX64_INPROCESSGPU=0" "$(wrapper_env /nonexistent)"
 
 # ==============================================================================
 # Entry points start and report a version

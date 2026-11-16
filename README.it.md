@@ -189,7 +189,7 @@ spotify-doctor
 *(oppure `spotify --doctor`)*
 
 Il comando analizza l'intero sistema attraverso **4 livelli di verifica**:
-1. **Host Termux:** Architettura CPU (ARM64/x86_64), spazio su disco disponibile, pacchetti Termux richiesti (`proot-distro`, `pulseaudio`, `jq`, `curl`) e abilitazione del permesso `allow-external-apps`.
+1. **Host Termux:** Architettura CPU (ARM64/x86_64), spazio su disco disponibile, pacchetti Termux richiesti (`proot-distro`, `pulseaudio`, `wget`, `curl`) e abilitazione del permesso `allow-external-apps`.
 2. **Integrazione Android & Companion:** Pacchetto e APK Termux-X11, pacchetto e APK Termux:API, e scorciatoie per Termux:Widget.
 3. **Servizi Runtime:** Configurazione ottimizzata di PulseAudio (speex-float-1, 48kHz), stato del daemon audio e del display server X11.
 4. **Container Ubuntu PRoot:** Reattività del container, layer di traduzione Box64 e JIT, window manager, integrità del binario ELF di Spotify e stato della patch SpotX.
@@ -273,6 +273,14 @@ shellcheck --severity=warning install.sh uninstall.sh src/*.sh src/guest/*.sh te
 ```
 
 Entrambi vengono eseguiti automaticamente a ogni push e pull request (`.github/workflows/ci.yml`). Lanciando installer o updater da un clone locale, gli script usano i file del repository invece di scaricarli da GitHub.
+
+### Pubblicare una release
+Gli utenti non scaricano mai dal ramo `main`, che cambia di continuo: l'installer e `spotify-update` leggono da `main` solo il file `VERSION`, poi scaricano ogni file dal tag immutabile `v<VERSION>`. Così una push in corso non può mai mescolare file di versioni diverse.
+
+1. Aumenta `VERSION` (CalVer `YYYY.MM.DD`, eventualmente `.N` per una seconda release nello stesso giorno) nella stessa push delle modifiche.
+2. Fai push su `main`. Quando i controlli della CI passano, il job `tag-release` crea il tag `v<VERSION>`.
+
+Una push che **non** cambia `VERSION` non è una release: gli utenti continuano a ricevere la versione taggata in precedenza. Finché il tag non esiste (per esempio mentre la CI è in esecuzione), installer e updater ripiegano su `main`.
 
 ---
 

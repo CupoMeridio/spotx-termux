@@ -257,17 +257,17 @@ if [ "$IS_TERMUX" = true ]; then
     X11_APP_FOUND=false
     if command -v pm >/dev/null 2>&1 || command -v cmd >/dev/null 2>&1; then
         # 1. Direct package path query
-        if ( command -v timeout >/dev/null 2>&1 && timeout 1 pm path com.termux.x11 >/dev/null 2>&1 ) || \
-           pm path com.termux.x11 >/dev/null 2>&1 || \
-           cmd package path com.termux.x11 >/dev/null 2>&1; then
+        # Every pm/cmd call is bounded: the package manager can hang on some Android builds
+        if run_with_timeout 2 pm path com.termux.x11 >/dev/null 2>&1 || \
+           run_with_timeout 2 cmd package path com.termux.x11 >/dev/null 2>&1; then
             X11_APP_FOUND=true
         # 2. Explicit component intent resolution (exempt from Android 11+ package visibility filters)
-        elif pm resolve-activity -n com.termux.x11/com.termux.x11.MainActivity 2>/dev/null | grep -q "com.termux.x11" || \
-             cmd package resolve-activity --brief -n com.termux.x11/com.termux.x11.MainActivity 2>/dev/null | grep -q "com.termux.x11"; then
+        elif run_with_timeout 3 pm resolve-activity -n com.termux.x11/com.termux.x11.MainActivity 2>/dev/null | grep -q "com.termux.x11" || \
+             run_with_timeout 3 cmd package resolve-activity --brief -n com.termux.x11/com.termux.x11.MainActivity 2>/dev/null | grep -q "com.termux.x11"; then
             X11_APP_FOUND=true
         # 3. Package list or package dump fallback
-        elif pm list packages com.termux.x11 2>/dev/null | grep -q "com.termux.x11" || \
-             pm dump com.termux.x11 2>/dev/null | grep -q "Package \[com.termux.x11\]"; then
+        elif run_with_timeout 3 pm list packages com.termux.x11 2>/dev/null | grep -q "com.termux.x11" || \
+             run_with_timeout 3 pm dump com.termux.x11 2>/dev/null | grep -q "Package \[com.termux.x11\]"; then
             X11_APP_FOUND=true
         fi
     elif [ -d "/data/data/com.termux.x11" ]; then
@@ -304,15 +304,14 @@ fi
 
 if [ "$IS_TERMUX" = true ]; then
     if command -v pm >/dev/null 2>&1 || command -v cmd >/dev/null 2>&1; then
-        if ( command -v timeout >/dev/null 2>&1 && timeout 1 pm path com.termux.api >/dev/null 2>&1 ) || \
-           pm path com.termux.api >/dev/null 2>&1 || \
-           cmd package path com.termux.api >/dev/null 2>&1; then
+        if run_with_timeout 2 pm path com.termux.api >/dev/null 2>&1 || \
+           run_with_timeout 2 cmd package path com.termux.api >/dev/null 2>&1; then
             API_APP_FOUND=true
-        elif pm resolve-activity -n com.termux.api/com.termux.api.TermuxApiReceiver 2>/dev/null | grep -q "com.termux.api" || \
-             cmd package resolve-activity --brief -n com.termux.api/com.termux.api.TermuxApiReceiver 2>/dev/null | grep -q "com.termux.api"; then
+        elif run_with_timeout 3 pm resolve-activity -n com.termux.api/com.termux.api.TermuxApiReceiver 2>/dev/null | grep -q "com.termux.api" || \
+             run_with_timeout 3 cmd package resolve-activity --brief -n com.termux.api/com.termux.api.TermuxApiReceiver 2>/dev/null | grep -q "com.termux.api"; then
             API_APP_FOUND=true
-        elif pm list packages com.termux.api 2>/dev/null | grep -q "com.termux.api" || \
-             pm dump com.termux.api 2>/dev/null | grep -q "Package \[com.termux.api\]"; then
+        elif run_with_timeout 3 pm list packages com.termux.api 2>/dev/null | grep -q "com.termux.api" || \
+             run_with_timeout 3 pm dump com.termux.api 2>/dev/null | grep -q "Package \[com.termux.api\]"; then
             API_APP_FOUND=true
         fi
     elif [ -d "/data/data/com.termux.api" ]; then
@@ -322,6 +321,8 @@ fi
 
 if [ "$API_PKG_FOUND" = true ]; then
     api_test_ok=false
+    # Deliberately not run_with_timeout: without 'timeout' the test is skipped, because
+    # termux-notification blocks forever when the Termux:API APK is missing or blocked
     if command -v timeout >/dev/null 2>&1; then
         if timeout 2 termux-notification --title "SpotX Check" --content "Testing Termux:API..." --id "spotx-diag" --priority low >/dev/null 2>&1; then
             api_test_ok=true

@@ -189,7 +189,7 @@ spotify-doctor
 *(or `spotify --doctor`)*
 
 The doctor inspects your setup across **4 comprehensive layers**:
-1. **Termux Host:** Architecture (ARM64/x86_64), available disk space, required packages (`proot-distro`, `pulseaudio`, `jq`, `curl`), and `allow-external-apps` permission.
+1. **Termux Host:** Architecture (ARM64/x86_64), available disk space, required packages (`proot-distro`, `pulseaudio`, `wget`, `curl`), and `allow-external-apps` permission.
 2. **Android & Companion Integration:** Termux-X11 package & APK, Termux:API package & APK, and Termux:Widget shortcuts.
 3. **Runtime Services:** PulseAudio configuration (speex-float-1, 48kHz), audio daemon status, and X11 display server.
 4. **Ubuntu PRoot Container:** Container responsiveness, Box64 translation layer & JIT configuration, window manager, Spotify ELF binary integrity, and SpotX patch application.
@@ -273,6 +273,14 @@ shellcheck --severity=warning install.sh uninstall.sh src/*.sh src/guest/*.sh te
 ```
 
 Both run automatically on every push and pull request (`.github/workflows/ci.yml`). When running the installer or updater from a local clone, the scripts use the files of the checkout instead of downloading them from GitHub.
+
+### Publishing a release
+Users never download from the moving `main` branch: the installer and `spotify-update` read only `VERSION` from `main`, then download every file from the immutable tag `v<VERSION>`, so a push in progress can never mix files of different versions.
+
+1. Bump `VERSION` (CalVer `YYYY.MM.DD`, optionally `.N` for a second release on the same day) in the same push as the changes.
+2. Push to `main`. When the CI checks pass, the `tag-release` job creates the tag `v<VERSION>`.
+
+A push that does **not** change `VERSION` is not a release: users keep receiving the previously tagged version. Until the tag exists (for example while CI is running), installer and updater fall back to `main`.
 
 ---
 

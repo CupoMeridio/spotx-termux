@@ -1,5 +1,7 @@
-# Box64 settings for Spotify, installed by guest-setup.sh as /root/.box64rc and
-# merged into /etc/box64.box64rc. Mirrored by spotify-box64-wrapper.sh: keep in sync.
+# Box64 settings for Spotify: the single source of truth. Installed by guest-setup.sh
+# as /root/.box64rc, merged into /etc/box64.box64rc, and copied to
+# /usr/local/lib/spotx-termux/box64-spotify.rc, from which spotify-box64-wrapper.sh
+# exports every BOX64_* line at launch.
 # BOX64_INPROCESSGPU must stay 0: --in-process-gpu crashes Spotify's zygote process.
 [spotify]
 BOX64_NOBANNER=1

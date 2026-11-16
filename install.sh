@@ -18,7 +18,25 @@ if [ -n "${BASH_SOURCE[0]:-}" ]; then
 fi
 if [ -z "$_SPOTX_LIB" ]; then
     _bootstrap_dir="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
-    _bootstrap_raw="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main"
+    _bootstrap_base="${SPOTX_REPO_BASE:-https://raw.githubusercontent.com/CupoMeridio/spotx-termux}"
+
+    # Release pinning: this copy of install.sh came from main. Install the release
+    # tagged v<VERSION of main> instead, so every file comes from the same immutable
+    # snapshot; the tagged installer runs with SPOTX_REPO_REF set and skips this block.
+    if [ -z "${SPOTX_REPO_REF:-}" ]; then
+        SPOTX_REPO_REF="main"
+        _main_ver="$(curl -fsSL "${_bootstrap_base}/main/VERSION?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)"
+        if [[ "$_main_ver" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]] && \
+           [ "$(curl -fsSL "${_bootstrap_base}/v${_main_ver}/VERSION" 2>/dev/null | tr -d '[:space:]' || true)" = "$_main_ver" ]; then
+            _tagged_installer="$(curl -fsSL "${_bootstrap_base}/v${_main_ver}/install.sh" 2>/dev/null || true)"
+            if [ "${_tagged_installer:0:2}" = "#!" ]; then
+                export SPOTX_REPO_REF="v${_main_ver}"
+                exec bash -c "$_tagged_installer" install.sh "$@"
+            fi
+        fi
+    fi
+    export SPOTX_REPO_REF
+    _bootstrap_raw="${_bootstrap_base}/${SPOTX_REPO_REF}"
     mkdir -p "$_bootstrap_dir" 2>/dev/null || true
     _SPOTX_LIB="${_bootstrap_dir}/spotx-common.sh"
     rm -f "$_SPOTX_LIB" "${_bootstrap_dir}/VERSION" 2>/dev/null || true
@@ -263,6 +281,7 @@ info "Executing container guest configuration..."
 proot-distro login "$CONTAINER_NAME" --shared-tmp -- \
     env SPOTX_FORCE="$SPOTX_FORCE" \
         SPOTX_TERMUX_VERSION="$SPOTX_TERMUX_VERSION" \
+        SPOTX_REPO_REF="$SPOTX_REPO_REF" \
         bash "$GUEST_STAGING_IN_CONTAINER"
 remove_guest_bundle
 

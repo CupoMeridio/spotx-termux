@@ -27,9 +27,10 @@ GUEST_SETUP_INSTALLED="/usr/local/lib/spotx-termux/guest-setup.sh"
 # Files installed into the container live in src/guest/ in the repository. The host
 # stages them next to this script (<dir>/guest-setup.sh + <dir>/guest/*), mirroring
 # the repo layout. Hosts running an updater that predates src/guest/ stage only this
-# script: in that case the files are downloaded from GitHub.
+# script: in that case the files are downloaded from GitHub, from the release tag the
+# host passes in SPOTX_REPO_REF (hosts that do not pass it get main).
 GUEST_FILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo /nonexistent)/guest"
-GUEST_REPO_RAW="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/guest"
+GUEST_REPO_RAW="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/${SPOTX_REPO_REF:-main}/src/guest"
 
 # ---------------------------------------------------------------------------
 # Helper: resolve latest Spotify version and package path from APT metadata
@@ -518,6 +519,8 @@ case "$ARCH" in
         info "Configuring Box64 Spotify settings..."
         mkdir -p /etc /root
         install_guest_file box64-spotify.rc /root/.box64rc 644
+        # Copy read by the Box64 wrapper at launch (single source for the BOX64_* values)
+        install -D -m 644 /root/.box64rc /usr/local/lib/spotx-termux/box64-spotify.rc
         # Fix /etc/box64.box64rc (installed by box64 package) to ensure BOX64_INPROCESSGPU is 0
         if [ -f /etc/box64.box64rc ]; then
             sed -i 's/BOX64_INPROCESSGPU[[:space:]]*=[[:space:]]*1/BOX64_INPROCESSGPU=0/g' /etc/box64.box64rc 2>/dev/null || true

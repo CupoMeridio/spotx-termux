@@ -18,7 +18,8 @@
 #   3 - probe_container (doctor)
 #   4 - stage_guest_bundle (update)
 #   5 - version_gt (update)
-SPOTX_LIB_API=5
+#   6 - use_release_ref / SPOTX_REPO_BASE (update)
+SPOTX_LIB_API=6
 
 # ------------------------------------------------------------------------------
 # 1. Environment & Architecture Detection
@@ -32,7 +33,12 @@ ARCH="$(uname -m 2>/dev/null || echo 'unknown')"
 # ------------------------------------------------------------------------------
 # 2. Project Constants, Shared Paths & IPC Endpoints
 # ------------------------------------------------------------------------------
-SPOTX_REPO_RAW="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main"
+# Downloads come from SPOTX_REPO_BASE/<ref>. The ref is "main" until use_release_ref
+# pins it to an immutable release tag; an exported SPOTX_REPO_REF (set by the
+# bootstrapped installer) is inherited so every file comes from the same snapshot.
+SPOTX_REPO_BASE="${SPOTX_REPO_BASE:-https://raw.githubusercontent.com/CupoMeridio/spotx-termux}"
+SPOTX_REPO_REF="${SPOTX_REPO_REF:-main}"
+SPOTX_REPO_RAW="${SPOTX_REPO_BASE}/${SPOTX_REPO_REF}"
 CONTAINER_NAME="ubuntu"
 TERMUX_SHEBANG="#!/data/data/com.termux/files/usr/bin/bash"
 
@@ -106,12 +112,13 @@ _read_version_file() {
 
 resolve_spotx_version() {
     local candidate
+    # 1. repo checkout  2. file next to the library (installed copy, or the bootstrap
+    # copy downloaded with its VERSION)  3. legacy marker of installs before 2026.11
     for candidate in \
+        "${SPOTX_REPO_ROOT:+${SPOTX_REPO_ROOT}/VERSION}" \
         "${SPOTX_LIB_DIR:+${SPOTX_LIB_DIR}/VERSION}" \
-        "${SPOTX_LIB_DIR:+${SPOTX_LIB_DIR}/../VERSION}" \
         "${SPOTX_DIR}/VERSION" \
-        "${HOME}/.spotx-termux-version" \
-        "${TERMUX_TMP}/VERSION"; do
+        "${HOME}/.spotx-termux-version"; do
         [ -n "$candidate" ] || continue
         if _read_version_file "$candidate"; then
             return 0
@@ -122,12 +129,14 @@ resolve_spotx_version() {
 
 SPOTX_TERMUX_VERSION="$(resolve_spotx_version)"
 
+# Single version marker: ~/.spotx-termux/VERSION. The legacy ~/.spotx-termux-version
+# is still read by resolve_spotx_version and is removed here (one-time migration).
 write_version_markers() {
     local ver="$1"
     is_valid_version "$ver" || return 0
     mkdir -p "$SPOTX_DIR" 2>/dev/null || true
-    echo "$ver" > "${HOME}/.spotx-termux-version" 2>/dev/null || true
     echo "$ver" > "${SPOTX_DIR}/VERSION" 2>/dev/null || true
+    rm -f "${HOME}/.spotx-termux-version" 2>/dev/null || true
 }
 
 # ------------------------------------------------------------------------------
@@ -435,7 +444,6 @@ SPOTX_CORE_PKGS=(
     "pulseaudio|pulseaudio"
     "wget|wget"
     "curl|curl"
-    "jq|jq"
 )
 SPOTX_OPTIONAL_PKGS=(
     "termux-api|termux-notification"
@@ -450,6 +458,29 @@ missing_pkgs() {
         command -v "$cmd" >/dev/null 2>&1 || missing+=("$pkg")
     done
     echo "${missing[*]}"
+}
+
+# Release pinning
+# Every release is an immutable git tag "v<VERSION>", created by CI once the checks
+# pass on main (see .github/workflows/ci.yml). Reading only VERSION from main and
+# everything else from that tag guarantees a consistent set of files even while
+# main is being pushed to. Without the tag (not created yet) downloads stay on main.
+latest_published_version() {
+    local ver=""
+    ver=$(curl -fsSL --connect-timeout 3 --max-time 6 "${SPOTX_REPO_BASE}/main/VERSION?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
+    is_valid_version "$ver" || ver=""
+    echo "${ver:-unknown}"
+}
+
+# use_release_ref <version>: pins SPOTX_REPO_REF/SPOTX_REPO_RAW to tag v<version>
+use_release_ref() {
+    local ver="$1" tagged=""
+    is_valid_version "$ver" || return 1
+    tagged=$(curl -fsSL --connect-timeout 3 --max-time 6 "${SPOTX_REPO_BASE}/v${ver}/VERSION" 2>/dev/null | tr -d '[:space:]' || true)
+    [ "$tagged" = "$ver" ] || return 1
+    SPOTX_REPO_REF="v${ver}"
+    SPOTX_REPO_RAW="${SPOTX_REPO_BASE}/${SPOTX_REPO_REF}"
+    export SPOTX_REPO_REF
 }
 
 # fetch_repo_file <repo-relative path> <destination> [validator]

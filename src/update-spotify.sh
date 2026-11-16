@@ -29,7 +29,7 @@ fi
 # must also work when the installed library is missing or older than this script
 # (e.g. a previous update replaced the scripts but not common.sh). In that case
 # load a fresh copy of the library from the repository for this run.
-if [ "${SPOTX_LIB_API:-0}" -lt 5 ]; then
+if [ "${SPOTX_LIB_API:-0}" -lt 6 ]; then
     _fresh_lib="${PREFIX:-/data/data/com.termux/files/usr}/tmp/spotx-common.update.$$.sh"
     if curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/common.sh?t=$(date +%s)" -o "$_fresh_lib" 2>/dev/null \
         && [ "$(head -c 2 "$_fresh_lib" 2>/dev/null)" = "#!" ]; then
@@ -42,7 +42,7 @@ if [ "${SPOTX_LIB_API:-0}" -lt 5 ]; then
         echo "    copy could not be downloaded. Check your connection and retry." >&2
         exit 1
     fi
-    if [ "${SPOTX_LIB_API:-0}" -lt 5 ]; then
+    if [ "${SPOTX_LIB_API:-0}" -lt 6 ]; then
         echo "[X] Error: the SpotX-Termux library on GitHub is older than this updater." >&2
         exit 1
     fi
@@ -143,17 +143,17 @@ if ! is_container_installed "$CONTAINER_NAME"; then
     exit 1
 fi
 
-# Helper: latest SpotX-Termux script version (local checkout when running from one, else GitHub)
+# Helper: latest SpotX-Termux script version (local checkout when running from one,
+# else the VERSION published on main; anything that is not CalVer counts as unknown)
 get_latest_spotx_version() {
     local ver=""
     if [ -n "$SPOTX_REPO_ROOT" ] && [ -f "${SPOTX_REPO_ROOT}/VERSION" ]; then
         ver=$(tr -d '[:space:]' < "${SPOTX_REPO_ROOT}/VERSION" 2>/dev/null || true)
+        is_valid_version "$ver" || ver=""
+        echo "${ver:-unknown}"
     else
-        ver=$(curl -fsSL --connect-timeout 2 --max-time 4 "${SPOTX_REPO_RAW}/VERSION?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
+        latest_published_version
     fi
-    # Reject anything that is not CalVer (e.g. an error body like "404:NotFound")
-    is_valid_version "$ver" || ver=""
-    echo "${ver:-unknown}"
 }
 
 # Helper: fetch latest Spotify client version from Debian repository metadata
@@ -171,6 +171,14 @@ echo -e "${CYAN}============================================${CLR}"
 info "Checking component versions..."
 
 SPOTX_TERMUX_LATEST_VERSION="$(get_latest_spotx_version)"
+# Download everything else from the immutable tag of that release (see use_release_ref)
+if [ -z "$SPOTX_REPO_ROOT" ] && [ "$SPOTX_TERMUX_LATEST_VERSION" != "unknown" ]; then
+    if use_release_ref "$SPOTX_TERMUX_LATEST_VERSION"; then
+        info "Using release ${SPOTX_REPO_REF}."
+    else
+        warn "Release tag v${SPOTX_TERMUX_LATEST_VERSION} not found yet: downloading from the main branch."
+    fi
+fi
 # Container state comes from the guest probe: single source of truth, one PRoot login
 if ! probe_container; then
     warn "Could not inspect the container; Spotify will be treated as not installed."
@@ -398,6 +406,7 @@ proot-distro login "$CONTAINER_NAME" --shared-tmp -- \
         SPOTX_SKIP="$SPOTX_SKIP" \
         SPOTX_FORCE="$SPOTX_FORCE" \
         SPOTX_TERMUX_VERSION="$SPOTX_TERMUX_VERSION" \
+        SPOTX_REPO_REF="$SPOTX_REPO_REF" \
         bash "$GUEST_STAGING_IN_CONTAINER"
 
 success "Update process finished! Log saved to ${LOG_FILE}"

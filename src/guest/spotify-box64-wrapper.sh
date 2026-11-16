@@ -1,19 +1,25 @@
 #!/bin/sh
 # Box64 wrapper for Spotify Desktop Client on ARM64
 # Installed by guest-setup.sh as /usr/bin/spotify (aarch64 only).
-# The BOX64_* values mirror box64-spotify.rc on purpose: the environment applies
-# even if Box64 does not pick up the [spotify] rc section. Keep the two in sync.
-export BOX64_NOBANNER=1
-export BOX64_LOG=0
-export BOX64_DYNAREC=1
-export BOX64_NOSANDBOX=1
-export BOX64_INPROCESSGPU=0
-export BOX64_MALLOC_HACK=2
-export BOX64_DYNAREC_STRONGMEM=1
-export BOX64_DYNAREC_BIGBLOCK=1
-export BOX64_DYNAREC_FASTNAN=1
-export BOX64_DYNAREC_FASTROUND=1
-export BOX64_DYNAREC_SAFEFLAGS=1
+#
+# The BOX64_* settings have a single source: box64-spotify.rc, installed by
+# guest-setup.sh as /usr/local/lib/spotx-termux/box64-spotify.rc (and merged into
+# the Box64 rc files). They are also exported here because the environment applies
+# even if Box64 does not pick up the [spotify] rc section.
+SPOTX_BOX64_RC="${SPOTX_BOX64_RC:-/usr/local/lib/spotx-termux/box64-spotify.rc}"
+
+if [ -r "$SPOTX_BOX64_RC" ]; then
+    # shellcheck disable=SC2163  # exporting the NAME=value held in $line is intended
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            BOX64_[A-Z0-9_]*=*) export "$line" ;;
+        esac
+    done < "$SPOTX_BOX64_RC"
+else
+    # rc file missing: keep at least the setting without which Spotify's zygote crashes
+    export BOX64_INPROCESSGPU=0
+fi
+
 export BOX64_LD_LIBRARY_PATH="/usr/share/spotify:${BOX64_LD_LIBRARY_PATH:-}"
 export LD_LIBRARY_PATH="/usr/share/spotify:${LD_LIBRARY_PATH:-}"
 exec box64 /usr/share/spotify/spotify "$@"
