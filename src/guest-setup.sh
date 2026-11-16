@@ -24,6 +24,13 @@ SPOTIFY_DIR="/usr/share/spotify"
 XPUI_SPA="${SPOTIFY_DIR}/Apps/xpui.spa"
 GUEST_SETUP_INSTALLED="/usr/local/lib/spotx-termux/guest-setup.sh"
 
+# Files installed into the container live in src/guest/ in the repository. The host
+# stages them next to this script (<dir>/guest-setup.sh + <dir>/guest/*), mirroring
+# the repo layout. Hosts running an updater that predates src/guest/ stage only this
+# script: in that case the files are downloaded from GitHub.
+GUEST_FILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo /nonexistent)/guest"
+GUEST_REPO_RAW="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/guest"
+
 # ---------------------------------------------------------------------------
 # Helper: resolve latest Spotify version and package path from APT metadata
 # Sets: LATEST_VER, PKG_PATH, PKG_SHA256
@@ -152,6 +159,44 @@ info()    { echo -e "${CYAN}${BOLD}[INFO]${CLR} $*"; }
 success() { echo -e "${GREEN}${BOLD}[SUCCESS]${CLR} $*"; }
 warn()    { echo -e "${YELLOW}${BOLD}[WARNING]${CLR} $*"; }
 error()   { echo -e "${RED}${BOLD}[ERROR]${CLR} $*" >&2; }
+
+# ---------------------------------------------------------------------------
+# Bundled guest files (src/guest/*)
+# ---------------------------------------------------------------------------
+is_valid_guest_file() {
+    local name="$1" path="$2"
+    [ -s "$path" ] || return 1
+    case "$name" in
+        *.sh) [ "$(head -c 2 "$path" 2>/dev/null)" = "#!" ] ;;
+        *.rc) grep -q '^\[spotify\]' "$path" 2>/dev/null ;;
+        *)    return 0 ;;
+    esac
+}
+
+# install_guest_file <name> <destination> <mode>
+# Takes the staged copy when present, otherwise downloads it; aborts setup if
+# neither yields a valid file (an installation without its runner is useless).
+install_guest_file() {
+    local name="$1" dest="$2" mode="$3"
+    local src="${GUEST_FILES_DIR}/${name}" tmp=""
+    if ! is_valid_guest_file "$name" "$src"; then
+        tmp="$(mktemp)"
+        if curl -fsSL "${GUEST_REPO_RAW}/${name}?t=$(date +%s)" -o "$tmp" 2>/dev/null \
+            && is_valid_guest_file "$name" "$tmp"; then
+            src="$tmp"
+        else
+            rm -f "$tmp"
+            error "Could not obtain ${name} (not staged by the host and download failed)."
+            exit 1
+        fi
+    fi
+    mkdir -p "$(dirname "$dest")"
+    # Remove first: dest may be a symlink (e.g. /usr/bin/spotify -> ../share/spotify/spotify)
+    rm -f "$dest"
+    install -m "$mode" "$src" "$dest"
+    [ -n "$tmp" ] && rm -f "$tmp"
+    return 0
+}
 
 echo -e "${CYAN}============================================${CLR}"
 echo -e "${CYAN}${BOLD}   SpotX-Termux - Container Setup (PRoot)   ${CLR}"
@@ -472,20 +517,7 @@ case "$ARCH" in
         # crashes Spotify's zygote process ("Try 'spotify --help' for more information")
         info "Configuring Box64 Spotify settings..."
         mkdir -p /etc /root
-        cat << 'BOX64RC' > /root/.box64rc
-[spotify]
-BOX64_NOBANNER=1
-BOX64_LOG=0
-BOX64_DYNAREC=1
-BOX64_NOSANDBOX=1
-BOX64_INPROCESSGPU=0
-BOX64_MALLOC_HACK=2
-BOX64_DYNAREC_STRONGMEM=1
-BOX64_DYNAREC_BIGBLOCK=1
-BOX64_DYNAREC_FASTNAN=1
-BOX64_DYNAREC_FASTROUND=1
-BOX64_DYNAREC_SAFEFLAGS=1
-BOX64RC
+        install_guest_file box64-spotify.rc /root/.box64rc 644
         # Fix /etc/box64.box64rc (installed by box64 package) to ensure BOX64_INPROCESSGPU is 0
         if [ -f /etc/box64.box64rc ]; then
             sed -i 's/BOX64_INPROCESSGPU[[:space:]]*=[[:space:]]*1/BOX64_INPROCESSGPU=0/g' /etc/box64.box64rc 2>/dev/null || true
@@ -498,26 +530,7 @@ BOX64RC
 
         # Create wrapper script for Box64 execution
         info "Configuring Box64 Spotify wrapper..."
-        rm -f /usr/bin/spotify
-        cat << 'WRAPPER' > /usr/bin/spotify
-#!/bin/sh
-# Box64 wrapper for Spotify Desktop Client on ARM64
-export BOX64_NOBANNER=1
-export BOX64_LOG=0
-export BOX64_DYNAREC=1
-export BOX64_NOSANDBOX=1
-export BOX64_INPROCESSGPU=0
-export BOX64_MALLOC_HACK=2
-export BOX64_DYNAREC_STRONGMEM=1
-export BOX64_DYNAREC_BIGBLOCK=1
-export BOX64_DYNAREC_FASTNAN=1
-export BOX64_DYNAREC_FASTROUND=1
-export BOX64_DYNAREC_SAFEFLAGS=1
-export BOX64_LD_LIBRARY_PATH="/usr/share/spotify:${BOX64_LD_LIBRARY_PATH:-}"
-export LD_LIBRARY_PATH="/usr/share/spotify:${LD_LIBRARY_PATH:-}"
-exec box64 /usr/share/spotify/spotify "$@"
-WRAPPER
-        chmod +x /usr/bin/spotify
+        install_guest_file spotify-box64-wrapper.sh /usr/bin/spotify 755
         ;;
 
     *)
@@ -585,124 +598,8 @@ else
 fi
 
 # 6. Create custom runner inside container (/usr/local/bin/spotify-termux)
-info "Generating container runner script /usr/local/bin/spotify-termux..."
-cat << 'RUNNER' > /usr/local/bin/spotify-termux
-#!/usr/bin/env bash
-# ==============================================================================
-# spotify-termux - Environment and flags runner for Spotify inside PRoot
-# ==============================================================================
-export DISPLAY="${DISPLAY:-:0}"
-export PULSE_SERVER="${PULSE_SERVER:-tcp:127.0.0.1:4713}"
-export PULSE_LATENCY_MSEC="${PULSE_LATENCY_MSEC:-500}"
-export LIBGL_ALWAYS_SOFTWARE=1
-export GDK_BACKEND=x11
-
-# Clear stale GPU cache which causes black screen on restarted sessions
-rm -rf "${HOME:-/root}/.cache/spotify/GPUCache" "${HOME:-/root}/.config/spotify/GPUCache" /root/.cache/spotify/GPUCache 2>/dev/null || true
-
-# Initialize D-Bus session bus if needed
-if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] || [ "${DBUS_SESSION_BUS_ADDRESS}" = "disabled:" ]; then
-    if command -v dbus-launch >/dev/null 2>&1; then
-        dbus-uuidgen --ensure 2>/dev/null || true
-        eval "$(dbus-launch --sh-syntax 2>/dev/null)" || true
-    fi
-fi
-
-# Export D-Bus session bus address to shared tmp
-if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
-    echo "$DBUS_SESSION_BUS_ADDRESS" > /tmp/spotx-dbus-address 2>/dev/null || true
-    echo "export DBUS_SESSION_BUS_ADDRESS=\"$DBUS_SESSION_BUS_ADDRESS\"" > /tmp/spotx-dbus.env 2>/dev/null || true
-fi
-
-# Start background media control and metadata bridge if playerctl is present
-BRIDGE_PID=""
-META_PID=""
-if command -v playerctl >/dev/null 2>&1; then
-    # 1. Listen for host control commands (play, pause, next, previous) via FIFO
-    (
-        rm -f /tmp/spotx-control.fifo
-        mkfifo /tmp/spotx-control.fifo 2>/dev/null || true
-        if [ -p /tmp/spotx-control.fifo ]; then
-            exec 3<> /tmp/spotx-control.fifo
-            while read -r -u 3 cmd; do
-                case "$cmd" in
-                    play-pause) playerctl -p spotify play-pause 2>/dev/null || true ;;
-                    play)       playerctl -p spotify play 2>/dev/null || true ;;
-                    pause)      playerctl -p spotify pause 2>/dev/null || true ;;
-                    next)       playerctl -p spotify next 2>/dev/null || true ;;
-                    previous)   playerctl -p spotify previous 2>/dev/null || true ;;
-                    quit|stop)  break ;;
-                esac
-            done
-            exec 3>&-
-        fi
-    ) &
-    BRIDGE_PID=$!
-
-    # 2. Monitor Spotify MPRIS metadata and playback status changes
-    (
-        for ((i=1; i<=40; i++)); do
-            if playerctl -p spotify status >/dev/null 2>&1; then
-                break
-            fi
-            sleep 0.5
-        done
-        if playerctl -p spotify status >/dev/null 2>&1; then
-            playerctl -p spotify metadata --format '{{status}}:::{{artist}}:::{{title}}' --follow 2>/dev/null | while IFS= read -r line; do
-                [ -z "$line" ] && continue
-                echo "$line" > /tmp/spotx-media.status.tmp 2>/dev/null && mv -f /tmp/spotx-media.status.tmp /tmp/spotx-media.status 2>/dev/null || true
-                if [ -p /tmp/spotx-media.fifo ]; then
-                    ( echo "$line" > /tmp/spotx-media.fifo 2>/dev/null & )
-                fi
-            done
-        fi
-    ) &
-    META_PID=$!
-fi
-
-# Launch Matchbox window manager to automatically adapt Spotify to full screen
-WM_PID=""
-if command -v matchbox-window-manager >/dev/null 2>&1; then
-    matchbox-window-manager -use_titlebar no &
-    WM_PID=$!
-elif command -v openbox >/dev/null 2>&1; then
-    openbox &
-    WM_PID=$!
-fi
-
-# Configure UI scaling factor for high-DPI smartphone touch screens (default: 1.5)
-SCALE_FACTOR="${SPOTIFY_SCALE:-1.5}"
-
-# Filter known benign warnings from stderr that are harmless on PRoot/Android:
-#   - libayatana-appindicator: deprecation notice emitted by the library at load time;
-#     the tray icon still works normally.
-#   - cannot open /proc/bus/pci/devices: libpci3 tries to scan the PCI bus for GPU
-#     detection; /proc/bus/pci does not exist on Android and libpci falls back safely.
-_SPOTX_FILTER='libayatana-appindicator is deprecated|cannot open /proc/bus/pci/devices'
-/usr/bin/spotify \
-    --start-maximized \
-    --force-device-scale-factor="$SCALE_FACTOR" \
-    --disable-gpu \
-    --disable-dev-shm-usage \
-    "$@" 2> >(grep -vE "$_SPOTX_FILTER" >&2)
-SPOTIFY_EXIT_CODE=$?
-
-# Terminate media bridge and window manager on exit
-if [ -n "$BRIDGE_PID" ]; then
-    kill "$BRIDGE_PID" 2>/dev/null || true
-fi
-if [ -n "$META_PID" ]; then
-    kill "$META_PID" 2>/dev/null || true
-fi
-if [ -n "$WM_PID" ]; then
-    kill "$WM_PID" 2>/dev/null || true
-fi
-rm -f /tmp/spotx-control.fifo /tmp/spotx-media.status /tmp/spotx-media.status.tmp /tmp/spotx-dbus-address /tmp/spotx-dbus.env 2>/dev/null || true
-
-exit $SPOTIFY_EXIT_CODE
-RUNNER
-
-chmod +x /usr/local/bin/spotify-termux
+info "Installing container runner script /usr/local/bin/spotify-termux..."
+install_guest_file spotify-termux.sh /usr/local/bin/spotify-termux 755
 
 # 7. Keep a copy of this script inside the container so the host can run
 #    '--probe' (doctor / updater) without network access

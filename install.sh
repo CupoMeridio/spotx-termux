@@ -252,21 +252,19 @@ fi
 # ------------------------------------------------------------------------------
 info "Configuring container environment, dependencies, Box64, Spotify, and SpotX..."
 
-mkdir -p "$TERMUX_TMP"
-CONTAINER_SETUP_STAGING="${TERMUX_TMP}/spotx-guest-setup.sh"
-if ! fetch_repo_file "src/guest-setup.sh" "$CONTAINER_SETUP_STAGING"; then
+if ! stage_guest_bundle; then
     error "Could not obtain a valid guest setup script (network or GitHub error)."
     error "Please check your connection and run the installer again."
     exit 1
 fi
-chmod +x "$CONTAINER_SETUP_STAGING"
+trap remove_guest_bundle EXIT
 
 info "Executing container guest configuration..."
 proot-distro login "$CONTAINER_NAME" --shared-tmp -- \
     env SPOTX_FORCE="$SPOTX_FORCE" \
         SPOTX_TERMUX_VERSION="$SPOTX_TERMUX_VERSION" \
-        bash /tmp/spotx-guest-setup.sh
-rm -f "$CONTAINER_SETUP_STAGING"
+        bash "$GUEST_STAGING_IN_CONTAINER"
+remove_guest_bundle
 
 # ------------------------------------------------------------------------------
 # 5. Host scripts, command wrappers and Termux:Widget shortcuts

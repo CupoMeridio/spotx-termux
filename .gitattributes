@@ -4,4 +4,5 @@
 
 # Ensure shell scripts and version files always use LF line endings
 *.sh text eol=lf
+*.rc text eol=lf
 VERSION text eol=lf

@@ -29,7 +29,7 @@ fi
 # must also work when the installed library is missing or older than this script
 # (e.g. a previous update replaced the scripts but not common.sh). In that case
 # load a fresh copy of the library from the repository for this run.
-if [ "${SPOTX_LIB_API:-0}" -lt 3 ]; then
+if [ "${SPOTX_LIB_API:-0}" -lt 4 ]; then
     _fresh_lib="${PREFIX:-/data/data/com.termux/files/usr}/tmp/spotx-common.update.$$.sh"
     if curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/common.sh?t=$(date +%s)" -o "$_fresh_lib" 2>/dev/null \
         && [ "$(head -c 2 "$_fresh_lib" 2>/dev/null)" = "#!" ]; then
@@ -42,7 +42,7 @@ if [ "${SPOTX_LIB_API:-0}" -lt 3 ]; then
         echo "    copy could not be downloaded. Check your connection and retry." >&2
         exit 1
     fi
-    if [ "${SPOTX_LIB_API:-0}" -lt 3 ]; then
+    if [ "${SPOTX_LIB_API:-0}" -lt 4 ]; then
         echo "[X] Error: the SpotX-Termux library on GitHub is older than this updater." >&2
         exit 1
     fi
@@ -344,18 +344,15 @@ if [ "$SPOTX_FORCE" = "0" ] && [ "$SPOTX_ONLY" = "0" ] && [ "$SPOTX_SKIP" = "0" 
     exit 0
 fi
 
-# Stage guest-setup.sh for container execution (through the shared /tmp)
-mkdir -p "$TERMUX_TMP"
-CONTAINER_SETUP_STAGING="${TERMUX_TMP}/spotx-guest-setup.sh"
-trap 'rm -f "$CONTAINER_SETUP_STAGING"' EXIT
+# Stage the guest bundle (guest-setup.sh + src/guest/*) for the container, through the shared /tmp
+trap remove_guest_bundle EXIT
 
 info "Fetching guest setup script..."
-if ! fetch_repo_file "src/guest-setup.sh" "$CONTAINER_SETUP_STAGING"; then
+if ! stage_guest_bundle; then
     error "Could not obtain a valid guest setup script (network or GitHub error)."
     error "No changes were made. Please retry later: spotify-update"
     exit 1
 fi
-chmod +x "$CONTAINER_SETUP_STAGING"
 
 # Auto-detect and install any newly required host packages (e.g. termux-api)
 if [ "$IS_TERMUX" = true ] && command -v pkg >/dev/null 2>&1; then
@@ -393,7 +390,7 @@ proot-distro login "$CONTAINER_NAME" --shared-tmp -- \
         SPOTX_SKIP="$SPOTX_SKIP" \
         SPOTX_FORCE="$SPOTX_FORCE" \
         SPOTX_TERMUX_VERSION="$SPOTX_TERMUX_VERSION" \
-        bash /tmp/spotx-guest-setup.sh
+        bash "$GUEST_STAGING_IN_CONTAINER"
 
 success "Update process finished! Log saved to ${LOG_FILE}"
 notify_user "SpotX-Termux" "Spotify update and SpotX patch completed successfully!" "check_circle"

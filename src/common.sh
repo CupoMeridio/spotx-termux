@@ -12,8 +12,9 @@
 # script loaded together with an older installed copy can detect the mismatch.
 # Each script checks the minimum it needs:
 #   2 - shared tables, fetch/sync helpers, stop_spotx_session (start, uninstall)
-#   3 - probe_container (doctor, update)
-SPOTX_LIB_API=3
+#   3 - probe_container (doctor)
+#   4 - stage_guest_bundle (update)
+SPOTX_LIB_API=4
 
 # ------------------------------------------------------------------------------
 # 1. Environment & Architecture Detection
@@ -301,6 +302,34 @@ probe_container() {
     done <<< "$out"
 
     [ "$GUEST_RESPONSIVE" = "yes" ]
+}
+
+# Guest bundle staged through the shared tmp: visible in the container as
+# /tmp/spotx-guest/guest-setup.sh + /tmp/spotx-guest/guest/* (repo layout of src/)
+SPOTX_GUEST_FILES=(spotify-termux.sh spotify-box64-wrapper.sh box64-spotify.rc)
+GUEST_STAGING_DIR="${TERMUX_TMP}/spotx-guest"
+GUEST_STAGING_IN_CONTAINER="/tmp/spotx-guest/guest-setup.sh"
+
+# stage_guest_bundle: fails only if guest-setup.sh itself cannot be obtained.
+# A missing extra file is not fatal: guest-setup.sh downloads it on its own.
+stage_guest_bundle() {
+    local name validator
+    rm -rf "$GUEST_STAGING_DIR"
+    mkdir -p "${GUEST_STAGING_DIR}/guest"
+    fetch_repo_file "src/guest-setup.sh" "${GUEST_STAGING_DIR}/guest-setup.sh" || return 1
+    for name in "${SPOTX_GUEST_FILES[@]}"; do
+        case "$name" in
+            *.sh) validator=is_valid_script ;;
+            *)    validator=is_nonempty_file ;;
+        esac
+        fetch_repo_file "src/guest/${name}" "${GUEST_STAGING_DIR}/guest/${name}" "$validator" || \
+            warn "Could not stage ${name}; the container setup will download it."
+    done
+    chmod +x "${GUEST_STAGING_DIR}/guest-setup.sh"
+}
+
+remove_guest_bundle() {
+    rm -rf "$GUEST_STAGING_DIR" 2>/dev/null || true
 }
 
 # ------------------------------------------------------------------------------
