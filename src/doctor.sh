@@ -280,9 +280,6 @@ if [ "$IS_TERMUX" = true ]; then
     elif [ -S "${TERMUX_TMP}/.X11-unix/X0" ] || [ -S "/tmp/.X11-unix/X0" ] || pgrep -f "termux-x11" >/dev/null 2>&1; then
         echo -e "  ${SYM_PASS} Termux-X11 App:    ${GREEN}active${CLR} ${DIM}(display socket/process running)${CLR}"
         record_pass
-    elif [ -f "${LOG_DIR}/termux-x11.log" ] && [ -s "${LOG_DIR}/termux-x11.log" ]; then
-        echo -e "  ${SYM_PASS} Termux-X11 App:    ${GREEN}configured${CLR} ${DIM}(verified via session log)${CLR}"
-        record_pass
     else
         echo -e "  ${SYM_WARN} Termux-X11 App:    ${YELLOW}not detected via pm${CLR}"
         record_warn "Termux-X11 APK Not Detected" "Download and install the APK from https://github.com/termux/termux-x11/releases"

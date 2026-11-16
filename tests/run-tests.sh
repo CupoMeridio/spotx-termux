@@ -108,6 +108,22 @@ for k in v1 v2 v3 v4 s1 s2 s3; do
     assert_ok "validator case $k" grep -qx "$k=ok" "$WORK/out.txt"
 done
 
+section "common.sh: version_gt"
+(
+    new_sandbox; load_common
+    for c in "2026.11.16>2026.10.11" "2026.10.11.1>2026.10.11" "2026.10.11.10>2026.10.11.9" \
+             "2026.10.11<2026.10.11.1" "2026.10.11=2026.10.11" "2026.09.30<2026.10.01"; do
+        if [[ "$c" == *">"* ]]; then a="${c%%>*}"; b="${c#*>}"; want=0
+        elif [[ "$c" == *"<"* ]]; then a="${c%%<*}"; b="${c#*<}"; want=1
+        else a="${c%%=*}"; b="${c#*=}"; want=1; fi
+        version_gt "$a" "$b"; got=$?
+        [ "$got" = "$want" ] && echo "ok $c" || echo "FAIL $c"
+    done
+) > "$WORK/out.txt"
+while read -r status rest; do
+    if [ "$status" = "ok" ]; then pass "version_gt: $rest"; else fail "version_gt: $rest"; fi
+done < "$WORK/out.txt"
+
 section "common.sh: version markers"
 out="$(
     new_sandbox; load_common
@@ -267,6 +283,28 @@ else
 fi
 assert_ok "stale lock is taken over" grep -qx "stale=taken" "$WORK/out.txt"
 assert_ok "lock released by its owner" grep -qx "released=ok" "$WORK/out.txt"
+
+section "start-spotify.sh: environment passed to the container"
+# Full launcher run with a fake proot-distro that records its arguments and exits
+# (Spotify "closes" immediately, so the launcher then runs its cleanup and returns).
+scale_run() { # [SPOTIFY_SCALE value] -> prints the recorded guest command line
+    (
+        new_sandbox
+        printf '#!/usr/bin/env bash\necho "$*" >> "%s/proot.log"\n' "$SANDBOX" > "$SANDBOX/fakebin/proot-distro"
+        chmod +x "$SANDBOX/fakebin/proot-distro"
+        if [ -n "${1:-}" ]; then export SPOTIFY_SCALE="$1"; else unset SPOTIFY_SCALE; fi
+        timeout 60 bash "$REPO/src/start-spotify.sh" >/dev/null 2>&1 < /dev/null
+        cat "$SANDBOX/proot.log" 2>/dev/null
+    )
+}
+out="$(scale_run 1.75)"
+if [[ "$out" == *"SPOTIFY_SCALE=1.75"* ]]; then pass "SPOTIFY_SCALE reaches the container"; else fail "SPOTIFY_SCALE reaches the container" "$out"; fi
+out="$(scale_run "")"
+if [[ "$out" == *"spotify-termux"* && "$out" != *"SPOTIFY_SCALE"* ]]; then
+    pass "no SPOTIFY_SCALE passed when unset (runner default applies)"
+else
+    fail "no SPOTIFY_SCALE passed when unset (runner default applies)" "$out"
+fi
 
 # ==============================================================================
 # guest-setup.sh

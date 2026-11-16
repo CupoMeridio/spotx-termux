@@ -58,7 +58,7 @@ Prima di avviare l'installazione su Termux, installa le applicazioni necessarie:
 Apri Termux e incolla il seguente comando:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh | bash
 ```
 
 Lo script si occuperà in totale autonomia di:
@@ -87,7 +87,7 @@ spotify
 4. Spotify viene avviato dentro Ubuntu PRoot con i flag di sandboxing disattivati (`--no-sandbox`).
 
 ### Avvio con Widget da Home Screen (Termux:Widget)
-Se hai installato il plugin **Termux:Widget**, puoi avviare Spotify con un singolo tocco dalla home del tuo smartphone.
+Se hai installato il plugin **Termux:Widget**, puoi avviare Spotify con un singolo tocco dalla home del tuo smartphone. Se tocchi di nuovo **`Spotify`** mentre è già in esecuzione, la finestra di Termux-X11 torna semplicemente in primo piano: un doppio tocco non avvia mai una seconda istanza e non interrompe la musica.
 
 > ⚠️ **Importante: Permessi Android**
 > Per permettere a Termux:Widget di lanciare processi in background (come Termux-X11) senza dover aprire obbligatoriamente l'interfaccia testuale di Termux, **devi concedere a Termux il permesso "Mostra sopra le altre app" (Display over other apps)** nelle Impostazioni di Android.
@@ -151,12 +151,13 @@ spotify-update
 
 ### Cosa viene aggiornato:
 1. **Ambiente del Container:** Scarica l'ultima configurazione di sistema, installa eventuali nuove librerie richieste (`libpci3`, `mesa-vulkan-drivers`, ecc.), sincronizza `/etc/box64.box64rc` e aggiorna il runner `/usr/local/bin/spotify-termux`.
-2. **Script Host Termux:** Aggiorna all'ultima versione `~/start-spotify.sh`, `~/update-spotify.sh`, `~/uninstall-spotify.sh` e le impostazioni di Termux.
+2. **Script Host Termux:** Aggiorna tutti gli script host (`~/start-spotify.sh`, `~/update-spotify.sh`, `~/doctor-spotify.sh`, `~/control-spotify.sh`, `~/uninstall-spotify.sh`, `~/.spotx-termux/common.sh`), i comandi `spotify*`, le scorciatoie del widget e le impostazioni di Termux. Gli script vengono sostituiti **tutti insieme e solo se ogni file scaricato è valido**: un errore di rete o di GitHub non può mai lasciare un'installazione aggiornata a metà o rotta.
 3. **Spotify e SpotX:** Verifica la versione installata rispetto a quella del repository Spotify:
    - Se Spotify è già aggiornato e SpotX è già applicato, **salta sia il download (~150 MB risparmiati) sia la riapplicazione della patch**, completando l'operazione in pochi secondi. Usa `--spotx-only` per forzare l'aggiornamento delle regole di SpotX.
    - Se è disponibile una nuova versione (o con `--force`), scarica il pacchetto deb, ne verifica l'integrità SHA256, lo estrae e applica SpotX.
+   - Un binario di Spotify corrotto viene riconosciuto e riscaricato anche se la versione è già quella più recente.
 
-> 💡 **Suggerimento:** È possibile rilanciare in qualsiasi momento anche il comando di installazione inline (`curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh | bash`). L'installer è **completamente idempotente**: riconosce che il container Ubuntu è già presente (quindi non lo elimina né riscarica da zero), salta il download dei file già aggiornati e sincronizza all'istante tutti gli script e le configurazioni in una quindicina di secondi.
+> 💡 **Suggerimento:** È possibile rilanciare in qualsiasi momento anche il comando di installazione inline (`curl -fsSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh | bash`). L'installer è **completamente idempotente**: riconosce che il container Ubuntu è già presente (quindi non lo elimina né riscarica da zero), salta il download dei file già aggiornati e sincronizza all'istante tutti gli script e le configurazioni in una quindicina di secondi.
 
 ### Opzioni di comando:
 - **Verificare solo la versione** (nessuna modifica al sistema):
@@ -205,7 +206,7 @@ Se desideri rimuovere o fare pulizia dei componenti di SpotX-Termux, puoi utiliz
 spotify-uninstall
 ```
 
-*(oppure `bash uninstall.sh`, o tramite one-liner `curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/uninstall.sh | bash`)*
+*(oppure `bash uninstall.sh`, o tramite one-liner `curl -fsSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/uninstall.sh | bash`)*
 
 ### Opzioni del Menu Interattivo:
 1. **Disinstallazione Completa (`--full` / `-f`)**:
@@ -214,11 +215,11 @@ spotify-uninstall
    - Rimuove tutti i comandi (`spotify`, `spotify-stop`, `spotify-control`, `spotify-update`, `spotify-doctor`, `spotify-uninstall`) e le scorciatoie di Termux:Widget.
    - Chiede facoltativamente se disinstallare anche i pacchetti Termux non più utilizzati (`termux-x11-nightly`, `pulseaudio`).
 2. **Rimuovere solo Spotify & SpotX (`--keep-ubuntu` / `--spotify-only`)**:
-   - Disinstalla Spotify, Box64, la mod SpotX e le cartelle di cache/configurazione dentro Ubuntu.
+   - Disinstalla Spotify, la mod SpotX e le cartelle di cache/configurazione dentro Ubuntu (Box64 viene mantenuto, perché altri programmi potrebbero usarlo).
    - Rimuove i lanciatori di Spotify da Termux.
    - **Mantiene intatto il container Ubuntu** per poterlo utilizzare con altri programmi o progetti.
 3. **Ripristinare solo il client ufficiale (`--spotx-only` / `-s`)**:
-   - Rimuove la patch SpotX e ripristina la versione stock originale e non modificata di Spotify Desktop.
+   - Rimuove la patch SpotX e ripristina la versione stock originale e non modificata di Spotify Desktop, usando il disinstallatore ufficiale di SpotX-Bash oppure, senza connessione, i backup creati da SpotX (`Apps/xpui.bak`, `spotify.bak`).
    - Mantiene Spotify e il container funzionanti.
 4. **Pulizia Cache e File Temporanei (`--clean-cache` / `-c`)**:
    - Elimina la cache utente di Spotify e gli archivi APT per recuperare spazio su disco senza disinstallare nulla.
@@ -238,19 +239,40 @@ spotify-uninstall --spotx-only     # Ripristina Spotify stock ufficiale
 
 ```
 spotx-termux/
-├── install.sh              # Script di installazione principale
-├── uninstall.sh            # Script modulare di pulizia e disinstallazione
-├── VERSION                 # Versione del progetto (CalVer YYYY.MM.DD)
-├── README.md               # Documentazione ufficiale (Inglese)
-├── README.it.md            # Documentazione (Italiano)
+├── install.sh                  # Script di installazione principale
+├── uninstall.sh                # Script modulare di pulizia e disinstallazione
+├── VERSION                     # Versione del progetto (CalVer YYYY.MM.DD[.N])
+├── README.md                   # Documentazione ufficiale (Inglese)
+├── README.it.md                # Documentazione (Italiano)
+├── .shellcheckrc               # Configurazione di ShellCheck
+├── .github/workflows/ci.yml    # CI: controllo sintassi, ShellCheck, suite di test
+├── tests/
+│   └── run-tests.sh            # Suite di test autonoma (non serve Android)
 └── src/
-    ├── common.sh           # Libreria runtime condivisa (versioni, log, IPC, notifiche)
-    ├── control-spotify.sh  # Controller di riproduzione multimediale (bridge MPRIS)
-    ├── doctor.sh           # Utility di diagnostica e health-check
-    ├── guest-setup.sh      # Script eseguito dentro Ubuntu PRoot (Box64, Spotify, SpotX)
-    ├── start-spotify.sh    # Script host per avviare PulseAudio, X11 e Spotify
-    └── update-spotify.sh   # Script host per verificare e applicare aggiornamenti
+    ├── common.sh               # Libreria host condivisa (percorsi, download, wrapper, arresto, probe del container)
+    ├── control-spotify.sh      # Controller di riproduzione multimediale (bridge MPRIS)
+    ├── doctor.sh               # Utility di diagnostica e health-check
+    ├── guest-setup.sh          # Setup del container (pacchetti, Box64, Spotify, SpotX) e --probe in sola lettura
+    ├── start-spotify.sh        # Script host per avviare PulseAudio, X11 e Spotify
+    ├── update-spotify.sh       # Script host per verificare e applicare aggiornamenti
+    └── guest/                  # File installati dentro il container
+        ├── spotify-termux.sh           # -> /usr/local/bin/spotify-termux (runner)
+        ├── spotify-box64-wrapper.sh    # -> /usr/bin/spotify (solo ARM64)
+        └── box64-spotify.rc            # -> /root/.box64rc, /etc/box64.box64rc
 ```
+
+---
+
+## 🧪 Sviluppo
+
+La suite di test gira su qualsiasi macchina con bash (Linux, Termux, Git Bash su Windows): Android, PRoot e apt sono sostituiti da piccoli finti eseguibili, e ogni test lavora in una `HOME`/`PREFIX` usa e getta.
+
+```bash
+bash tests/run-tests.sh      # suite di test completa
+shellcheck --severity=warning install.sh uninstall.sh src/*.sh src/guest/*.sh tests/*.sh
+```
+
+Entrambi vengono eseguiti automaticamente a ogni push e pull request (`.github/workflows/ci.yml`). Lanciando installer o updater da un clone locale, gli script usano i file del repository invece di scaricarli da GitHub.
 
 ---
 

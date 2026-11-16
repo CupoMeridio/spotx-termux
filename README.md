@@ -58,7 +58,7 @@ Before running the installer in Termux, install the required applications:
 Open Termux and paste the following command:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh | bash
 ```
 
 The script will automatically:
@@ -87,7 +87,7 @@ spotify
 4. Launches Spotify inside Ubuntu PRoot with sandboxing flags adjusted for user-space (`--no-sandbox`).
 
 ### Launch via Home Screen Widget (Termux:Widget)
-If you installed the **Termux:Widget** plugin, you can launch Spotify with a single tap from your Android home screen.
+If you installed the **Termux:Widget** plugin, you can launch Spotify with a single tap from your Android home screen. Tapping **`Spotify`** again while it is already running simply brings the Termux-X11 window back to the foreground: a double tap never starts a second instance or interrupts playback.
 
 > ⚠️ **Important: Android Permissions**
 > To allow Termux:Widget to launch apps in the background (like Termux-X11) without bringing the terminal to the foreground, you **must grant the "Display over other apps" (or "Draw over other apps") permission to the Termux app** in your Android Settings.
@@ -151,12 +151,13 @@ spotify-update
 
 ### What gets updated:
 1. **Container & Environment:** Automatically fetches the latest environment configuration, installs any newly added libraries (`libpci3`, `mesa-vulkan-drivers`, etc.), syncs `/etc/box64.box64rc`, and updates `/usr/local/bin/spotify-termux`.
-2. **Host Launchers:** Refreshes `~/start-spotify.sh`, `~/update-spotify.sh`, `~/uninstall-spotify.sh`, and Termux properties.
+2. **Host Launchers:** Refreshes all host scripts (`~/start-spotify.sh`, `~/update-spotify.sh`, `~/doctor-spotify.sh`, `~/control-spotify.sh`, `~/uninstall-spotify.sh`, `~/.spotx-termux/common.sh`), the `spotify*` commands, the widget shortcuts, and Termux properties. Scripts are replaced **all together and only if every downloaded file is valid**, so a network or GitHub error can never leave a half-updated or broken installation.
 3. **Spotify & SpotX:** Checks your installed version against the latest package in the Spotify APT repository:
    - If Spotify is up to date and SpotX is already applied, it **skips downloading (~150 MB saved) and skips re-patching**, finishing in seconds. Use `--spotx-only` to force re-applying SpotX rules.
    - If a new Spotify version is available (or `--force`), it downloads the deb package, verifies SHA256 integrity, unpacks it, and applies SpotX.
+   - A corrupted Spotify binary is detected and re-downloaded even when the version is already current.
 
-> 💡 **Tip:** You can also re-run the main inline installation command at any time (`curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh | bash`). The installer is **completely idempotent**: it detects your existing Ubuntu container without wiping it, skips downloading existing packages, and quickly brings all scripts and configurations up to date in seconds.
+> 💡 **Tip:** You can also re-run the main inline installation command at any time (`curl -fsSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/install.sh | bash`). The installer is **completely idempotent**: it detects your existing Ubuntu container without wiping it, skips downloading existing packages, and quickly brings all scripts and configurations up to date in seconds.
 
 ### Command Options:
 - **Check versions only** (no changes made):
@@ -205,7 +206,7 @@ If you want to clean up or uninstall SpotX-Termux, you can use the built-in modu
 spotify-uninstall
 ```
 
-*(or `bash uninstall.sh`, or via one-liner `curl -sSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/uninstall.sh | bash`)*
+*(or `bash uninstall.sh`, or via one-liner `curl -fsSL https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/uninstall.sh | bash`)*
 
 ### Interactive Cleanup Options:
 1. **Full Uninstallation (`--full` / `-f`)**:
@@ -214,11 +215,11 @@ spotify-uninstall
    - Deletes all command launchers (`spotify`, `spotify-stop`, `spotify-control`, `spotify-update`, `spotify-doctor`, `spotify-uninstall`) and Termux:Widget shortcuts.
    - Optionally asks if you also want to remove unused Termux packages (`termux-x11-nightly`, `pulseaudio`).
 2. **Remove Spotify & SpotX only (`--keep-ubuntu` / `--spotify-only`)**:
-   - Uninstalls Spotify, Box64, SpotX, and user cache/config files inside the container.
+   - Uninstalls Spotify, SpotX, and user cache/config files inside the container (Box64 is kept, as other tools may use it).
    - Removes Spotify Termux launchers.
    - **Preserves the Ubuntu container intact** for your other projects and tools.
 3. **Revert SpotX patch only (`--spotx-only` / `-s`)**:
-   - Restores the official unmodified desktop Spotify client.
+   - Restores the official unmodified desktop Spotify client, using the official SpotX-Bash uninstaller or, when offline, the backups SpotX created (`Apps/xpui.bak`, `spotify.bak`).
    - Keeps Spotify and the container intact.
 4. **Clean Cache & Temporary Files (`--clean-cache` / `-c`)**:
    - Cleans Spotify user caches and APT archives to free disk space without uninstalling anything.
@@ -238,19 +239,40 @@ spotify-uninstall --spotx-only     # Revert to official stock Spotify
 
 ```
 spotx-termux/
-├── install.sh              # Main installation script
-├── uninstall.sh            # Modular cleanup & uninstallation script
-├── VERSION                 # Project version (CalVer YYYY.MM.DD)
-├── README.md               # Official documentation (English)
-├── README.it.md            # Documentation (Italian)
+├── install.sh                  # Main installation script
+├── uninstall.sh                # Modular cleanup & uninstallation script
+├── VERSION                     # Project version (CalVer YYYY.MM.DD[.N])
+├── README.md                   # Official documentation (English)
+├── README.it.md                # Documentation (Italian)
+├── .shellcheckrc               # ShellCheck configuration
+├── .github/workflows/ci.yml    # CI: syntax check, ShellCheck, test suite
+├── tests/
+│   └── run-tests.sh            # Self-contained test suite (no Android needed)
 └── src/
-    ├── common.sh           # Shared runtime library (versions, logging, IPC, notifications)
-    ├── control-spotify.sh  # Host media playback controller (MPRIS bridge)
-    ├── doctor.sh           # Diagnostic & health-check utility
-    ├── guest-setup.sh      # Container configuration script (Box64, Spotify, SpotX)
-    ├── start-spotify.sh    # Host launcher (PulseAudio, X11, Spotify)
-    └── update-spotify.sh   # Host updater orchestrator
+    ├── common.sh               # Shared host library (paths, downloads, wrappers, shutdown, container probe)
+    ├── control-spotify.sh      # Host media playback controller (MPRIS bridge)
+    ├── doctor.sh               # Diagnostic & health-check utility
+    ├── guest-setup.sh          # Container setup (packages, Box64, Spotify, SpotX) and read-only --probe
+    ├── start-spotify.sh        # Host launcher (PulseAudio, X11, Spotify)
+    ├── update-spotify.sh       # Host updater orchestrator
+    └── guest/                  # Files installed inside the container
+        ├── spotify-termux.sh           # -> /usr/local/bin/spotify-termux (runner)
+        ├── spotify-box64-wrapper.sh    # -> /usr/bin/spotify (ARM64 only)
+        └── box64-spotify.rc            # -> /root/.box64rc, /etc/box64.box64rc
 ```
+
+---
+
+## 🧪 Development
+
+The test suite runs on any machine with bash (Linux, Termux, Git Bash on Windows): Android, PRoot and apt are replaced by small fakes, and every test works in a throwaway `HOME`/`PREFIX`.
+
+```bash
+bash tests/run-tests.sh      # full test suite
+shellcheck --severity=warning install.sh uninstall.sh src/*.sh src/guest/*.sh tests/*.sh
+```
+
+Both run automatically on every push and pull request (`.github/workflows/ci.yml`). When running the installer or updater from a local clone, the scripts use the files of the checkout instead of downloading them from GitHub.
 
 ---
 

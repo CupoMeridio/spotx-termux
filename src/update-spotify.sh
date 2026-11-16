@@ -29,7 +29,7 @@ fi
 # must also work when the installed library is missing or older than this script
 # (e.g. a previous update replaced the scripts but not common.sh). In that case
 # load a fresh copy of the library from the repository for this run.
-if [ "${SPOTX_LIB_API:-0}" -lt 4 ]; then
+if [ "${SPOTX_LIB_API:-0}" -lt 5 ]; then
     _fresh_lib="${PREFIX:-/data/data/com.termux/files/usr}/tmp/spotx-common.update.$$.sh"
     if curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/common.sh?t=$(date +%s)" -o "$_fresh_lib" 2>/dev/null \
         && [ "$(head -c 2 "$_fresh_lib" 2>/dev/null)" = "#!" ]; then
@@ -42,7 +42,7 @@ if [ "${SPOTX_LIB_API:-0}" -lt 4 ]; then
         echo "    copy could not be downloaded. Check your connection and retry." >&2
         exit 1
     fi
-    if [ "${SPOTX_LIB_API:-0}" -lt 4 ]; then
+    if [ "${SPOTX_LIB_API:-0}" -lt 5 ]; then
         echo "[X] Error: the SpotX-Termux library on GitHub is older than this updater." >&2
         exit 1
     fi
@@ -191,11 +191,17 @@ SPOTIFY_LATEST_VER="$(get_latest_spotify_version)"
 
 # Evaluate Host Scripts Status
 HOST_UPDATE_AVAIL=0
+# Installed scripts newer than the published ones (a development copy): never
+# overwrite them with the older release unless --force is given
+HOST_NEWER=0
 if [ -z "$SPOTX_TERMUX_LATEST_VERSION" ] || [ "$SPOTX_TERMUX_LATEST_VERSION" = "unknown" ]; then
     HOST_STATUS="${DIM}Check skipped (offline/unreachable)${CLR}"
-elif [ "$SPOTX_TERMUX_VERSION" != "$SPOTX_TERMUX_LATEST_VERSION" ]; then
+elif ! is_valid_version "$SPOTX_TERMUX_VERSION" || version_gt "$SPOTX_TERMUX_LATEST_VERSION" "$SPOTX_TERMUX_VERSION"; then
     HOST_STATUS="${YELLOW}${BOLD}Update available${CLR}"
     HOST_UPDATE_AVAIL=1
+elif version_gt "$SPOTX_TERMUX_VERSION" "$SPOTX_TERMUX_LATEST_VERSION"; then
+    HOST_STATUS="${CYAN}${BOLD}Newer than the published release (development copy)${CLR}"
+    HOST_NEWER=1
 else
     HOST_STATUS="${GREEN}${BOLD}Up-to-date [OK]${CLR}"
 fi
@@ -366,7 +372,9 @@ fi
 ensure_allow_external_apps
 
 info "[1/3] Synchronizing host scripts and configuration..."
-if sync_host_scripts; then
+if [ "$HOST_NEWER" = "1" ] && [ "$SPOTX_FORCE" = "0" ]; then
+    info "Installed scripts (${SPOTX_TERMUX_VERSION}) are newer than the published release: keeping them."
+elif sync_host_scripts; then
     # Scripts and version marker move together, so the marker never claims a
     # version whose scripts were not actually installed
     if [ "$SPOTX_TERMUX_LATEST_VERSION" != "unknown" ]; then

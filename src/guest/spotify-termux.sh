@@ -65,7 +65,9 @@ if command -v playerctl >/dev/null 2>&1; then
                 [ -z "$line" ] && continue
                 echo "$line" > /tmp/spotx-media.status.tmp 2>/dev/null && mv -f /tmp/spotx-media.status.tmp /tmp/spotx-media.status 2>/dev/null || true
                 if [ -p /tmp/spotx-media.fifo ]; then
-                    ( echo "$line" > /tmp/spotx-media.fifo 2>/dev/null & )
+                    # Opening a FIFO blocks until a reader appears: bound the wait so a
+                    # missing host bridge cannot leave one stuck process per track change
+                    ( timeout 5 sh -c 'echo "$1" > /tmp/spotx-media.fifo' _ "$line" 2>/dev/null & )
                 fi
             done
         fi

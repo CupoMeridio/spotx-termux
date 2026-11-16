@@ -285,7 +285,13 @@ fi
 # 6. Execute Spotify inside PRoot Ubuntu container in background
 echo -e "${GREEN}${BOLD}[OK] Starting Spotify in Ubuntu container...${CLR}"
 # Filter known PRoot futex warnings that occur when threads are killed
-proot-distro login "$CONTAINER_NAME" --shared-tmp -- env DISPLAY=:0 PULSE_SERVER=tcp:127.0.0.1:4713 /usr/local/bin/spotify-termux "$@" 2> >(grep -v "The futex facility returned an unexpected error code" >&2) &
+# proot-distro login does not inherit the host environment: pass explicitly what the
+# runner reads. SPOTIFY_SCALE lets users pick the UI scale ('SPOTIFY_SCALE=1.75 spotify').
+GUEST_ENV=(DISPLAY=:0 PULSE_SERVER=tcp:127.0.0.1:4713)
+if [ -n "${SPOTIFY_SCALE:-}" ]; then
+    GUEST_ENV+=("SPOTIFY_SCALE=${SPOTIFY_SCALE}")
+fi
+proot-distro login "$CONTAINER_NAME" --shared-tmp -- env "${GUEST_ENV[@]}" /usr/local/bin/spotify-termux "$@" 2> >(grep -v "The futex facility returned an unexpected error code" >&2) &
 SPOTIFY_PID=$!
 
 # Wait for Spotify process to finish

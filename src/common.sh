@@ -17,7 +17,8 @@
 #   2 - shared tables, fetch/sync helpers, stop_spotx_session (start, uninstall)
 #   3 - probe_container (doctor)
 #   4 - stage_guest_bundle (update)
-SPOTX_LIB_API=4
+#   5 - version_gt (update)
+SPOTX_LIB_API=5
 
 # ------------------------------------------------------------------------------
 # 1. Environment & Architecture Detection
@@ -75,6 +76,19 @@ is_nonempty_file() {
 
 is_valid_version() {
     [[ "${1:-}" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]]
+}
+
+# version_gt <a> <b>: true if CalVer a is newer than b (a missing 4th field counts as 0)
+version_gt() {
+    local -a a b
+    local i
+    IFS=. read -r -a a <<< "$1"
+    IFS=. read -r -a b <<< "$2"
+    for i in 0 1 2 3; do
+        if ((10#${a[i]:-0} > 10#${b[i]:-0})); then return 0; fi
+        if ((10#${a[i]:-0} < 10#${b[i]:-0})); then return 1; fi
+    done
+    return 1
 }
 
 # ------------------------------------------------------------------------------
