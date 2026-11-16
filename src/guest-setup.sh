@@ -1,37 +1,28 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # guest-setup.sh - Configuration script inside PRoot Ubuntu container
-# Supports idempotent re-execution and environment-driven modes:
-#   SPOTX_CHECK_ONLY=1  — print version info and exit without changes
-#   SPOTX_ONLY=1        — skip Spotify client update, re-apply SpotX patch only
-#   SPOTX_SKIP=1        — skip SpotX patch application
-#   SPOTX_FORCE=1       — force full re-download and re-installation of Spotify and Box64
+#
+# Modes:
+#   --probe             — print container state as KEY=VALUE lines and exit.
+#                         Read-only and offline: the single source of truth used
+#                         by spotify-doctor and spotify-update on the host.
+#   (default)           — idempotent install / update, driven by environment:
+#     SPOTX_ONLY=1      — skip Spotify client update, re-apply SpotX patch only
+#     SPOTX_SKIP=1      — skip SpotX patch application
+#     SPOTX_FORCE=1     — force full re-download and re-installation of Spotify and Box64
+#
+# A copy of this script is kept at GUEST_SETUP_INSTALLED so the host can run
+# the probe without network access.
 # ==============================================================================
 set -euo pipefail
 
-# ANSI color codes for friendly terminal output
-CLR='\033[0m'
-BOLD='\033[1m'
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
-
-info()    { echo -e "${CYAN}${BOLD}[INFO]${CLR} $*"; }
-success() { echo -e "${GREEN}${BOLD}[SUCCESS]${CLR} $*"; }
-warn()    { echo -e "${YELLOW}${BOLD}[WARNING]${CLR} $*"; }
-error()   { echo -e "${RED}${BOLD}[ERROR]${CLR} $*" >&2; }
+# Version of the --probe output format; the host refuses scripts without it.
+SPOTX_PROBE_API=1
 
 VERSION_MARKER="/usr/share/spotify/.spotx-termux-version"
-
-echo -e "${CYAN}============================================${CLR}"
-echo -e "${CYAN}${BOLD}   SpotX-Termux - Container Setup (PRoot)   ${CLR}"
-echo -e "${CYAN}============================================${CLR}"
-
-export DEBIAN_FRONTEND=noninteractive
-
-ARCH="$(uname -m)"
-info "Detected architecture inside container: ${ARCH}"
+SPOTIFY_DIR="/usr/share/spotify"
+XPUI_SPA="${SPOTIFY_DIR}/Apps/xpui.spa"
+GUEST_SETUP_INSTALLED="/usr/local/lib/spotx-termux/guest-setup.sh"
 
 # ---------------------------------------------------------------------------
 # Helper: resolve latest Spotify version and package path from APT metadata
@@ -47,17 +38,17 @@ resolve_latest_spotify() {
 }
 
 # ---------------------------------------------------------------------------
-# Helper: read installed version from marker file
+# Helper: read installed version (marker file, then package changelog, then dpkg)
 # Sets: INSTALLED_VER
 # ---------------------------------------------------------------------------
 read_installed_version() {
     INSTALLED_VER=""
     if [ -f "$VERSION_MARKER" ]; then
-        INSTALLED_VER=$(cat "$VERSION_MARKER" 2>/dev/null | tr -d '[:space:]' || true)
+        INSTALLED_VER=$(tr -d '[:space:]' < "$VERSION_MARKER" 2>/dev/null || true)
     fi
     if [ -z "$INSTALLED_VER" ] && [ -f /usr/share/doc/spotify-client/changelog.Debian.gz ]; then
         INSTALLED_VER=$(zcat /usr/share/doc/spotify-client/changelog.Debian.gz 2>/dev/null | awk '/^spotify-client \(/ { gsub(/[()]/,"",$2); print $2; exit }' || true)
-        if [ -n "$INSTALLED_VER" ]; then
+        if [ -n "$INSTALLED_VER" ] && [ "${SPOTX_PROBE_MODE:-0}" != "1" ]; then
             mkdir -p "$(dirname "$VERSION_MARKER")" 2>/dev/null || true
             echo "$INSTALLED_VER" > "$VERSION_MARKER" 2>/dev/null || true
         fi
@@ -67,118 +58,109 @@ read_installed_version() {
     fi
 }
 
+is_valid_elf() {
+    [ -f "$1" ] && [ "$(head -c 4 "$1" 2>/dev/null)" = $'\x7fELF' ]
+}
+
 # ---------------------------------------------------------------------------
-# Helper: check if SpotX patch is applied to xpui.spa
+# Helper: SpotX patch state of xpui.spa -> applied | not_applied | missing_xpui | unknown
+#
+# SpotX-Bash marks a patched client by appending "//# SpotX was here" to xpui.js
+# (xpui-snapshot.js on newer clients) inside xpui.spa. Its backups (Apps/xpui.bak,
+# spotify.bak) are NOT a valid signal: they survive a Spotify update, after which
+# xpui.spa is stock again. Process substitution keeps grep's status only, so an
+# early 'grep -q' exit (SIGPIPE in unzip) is not misread under pipefail.
 # ---------------------------------------------------------------------------
-is_spotx_applied() {
-    local spa="${1:-/usr/share/spotify/Apps/xpui.spa}"
-    local app_dir
-    app_dir="$(dirname "$spa" 2>/dev/null || echo '/usr/share/spotify/Apps')"
-    if [ -f "${app_dir}/xpui.bak" ] || [ -f "${app_dir}/xpui.spa.bak" ] || [ -f "/usr/share/spotify/spotify.bak" ]; then
-        return 0
-    fi
-    if [ -f "$spa" ] && command -v unzip >/dev/null 2>&1; then
-        if unzip -p "$spa" 2>/dev/null | grep -Fq "SpotX"; then
+spotx_patch_state() {
+    local member
+    [ -f "$XPUI_SPA" ] || { echo "missing_xpui"; return 0; }
+    command -v unzip >/dev/null 2>&1 || { echo "unknown"; return 0; }
+    for member in xpui.js xpui-snapshot.js; do
+        if grep -Fq "SpotX" < <(unzip -p "$XPUI_SPA" "$member" 2>/dev/null); then
+            echo "applied"
             return 0
         fi
-    fi
-    return 1
+    done
+    echo "not_applied"
+}
+
+is_spotx_applied() {
+    [ "$(spotx_patch_state)" = "applied" ]
 }
 
 # ===========================================================================
-# DOCTOR MODE: print container diagnostics and exit
+# PROBE MODE: machine-readable container state, no side effects, no network
 # ===========================================================================
-if [ "${SPOTX_DOCTOR:-}" = "1" ] || [ "${1:-}" = "--doctor" ]; then
-    echo -e "${CYAN}=== Ubuntu PRoot Container Diagnostics ===${CLR}"
-    
-    ARCH="$(uname -m)"
-    echo -e "  Container Architecture:    ${BOLD}${ARCH}${CLR}"
-    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-        if command -v box64 >/dev/null 2>&1; then
-            echo -e "  Box64 Translation:         ${GREEN}${BOLD}$(box64 -v 2>&1 | head -1)${CLR}"
-        else
-            echo -e "  Box64 Translation:         ${RED}${BOLD}missing${CLR}"
-        fi
-        if grep -E "^BOX64_INPROCESSGPU=0" /etc/box64.box64rc /root/.box64rc >/dev/null 2>&1; then
-            echo -e "  Box64 In-Process GPU:      ${GREEN}${BOLD}disabled (0)${CLR}"
-        else
-            echo -e "  Box64 In-Process GPU:      ${YELLOW}${BOLD}not configured${CLR}"
-        fi
+if [ "${1:-}" = "--probe" ]; then
+    SPOTX_PROBE_MODE=1
+    echo "GUEST_PROBE_API=${SPOTX_PROBE_API}"
+    echo "GUEST_RESPONSIVE=yes"
+
+    if command -v box64 >/dev/null 2>&1; then
+        echo "GUEST_BOX64_VER=$(box64 -v 2>&1 | head -1 || true)"
+    else
+        echo "GUEST_BOX64_VER="
+    fi
+    if grep -Eq "^BOX64_INPROCESSGPU=0" /etc/box64.box64rc /root/.box64rc 2>/dev/null; then
+        echo "GUEST_BOX64_GPU=0"
+    else
+        echo "GUEST_BOX64_GPU=other"
     fi
 
     if command -v matchbox-window-manager >/dev/null 2>&1; then
-        echo -e "  Window Manager:            ${GREEN}${BOLD}matchbox-window-manager${CLR}"
+        echo "GUEST_WM=matchbox"
     elif command -v openbox >/dev/null 2>&1; then
-        echo -e "  Window Manager:            ${GREEN}${BOLD}openbox${CLR}"
+        echo "GUEST_WM=openbox"
     else
-        echo -e "  Window Manager:            ${YELLOW}${BOLD}none${CLR}"
+        echo "GUEST_WM=none"
     fi
 
-    if [ -f /usr/share/spotify/spotify ]; then
-        if [ "$(head -c 4 /usr/share/spotify/spotify 2>/dev/null)" = $'\x7fELF' ]; then
-            echo -e "  Spotify Binary:            ${GREEN}${BOLD}valid ELF executable${CLR}"
-        else
-            echo -e "  Spotify Binary:            ${RED}${BOLD}corrupted / invalid ELF${CLR}"
-        fi
+    if [ ! -f "${SPOTIFY_DIR}/spotify" ]; then
+        echo "GUEST_ELF=missing"
+    elif is_valid_elf "${SPOTIFY_DIR}/spotify"; then
+        echo "GUEST_ELF=valid_elf"
     else
-        echo -e "  Spotify Binary:            ${RED}${BOLD}missing${CLR}"
+        echo "GUEST_ELF=corrupted"
     fi
 
     read_installed_version
-    echo -e "  Installed Version:         ${BOLD}${INSTALLED_VER:-unknown}${CLR}"
-    SPOTX_APPLIED="no"
-    if is_spotx_applied; then
-        SPOTX_APPLIED="yes"
-    fi
-    echo -e "  SpotX Patch:               ${BOLD}${SPOTX_APPLIED}${CLR}"
+    echo "GUEST_VER=${INSTALLED_VER}"
+    echo "GUEST_SPOTX=$(spotx_patch_state)"
 
     if [ -x /usr/local/bin/spotify-termux ]; then
-        echo -e "  Container Runner:          ${GREEN}${BOLD}present (/usr/local/bin/spotify-termux)${CLR}"
+        echo "GUEST_RUNNER=yes"
     else
-        echo -e "  Container Runner:          ${RED}${BOLD}missing${CLR}"
+        echo "GUEST_RUNNER=no"
     fi
-    echo
+    if command -v playerctl >/dev/null 2>&1; then
+        echo "GUEST_PLAYERCTL=yes"
+    else
+        echo "GUEST_PLAYERCTL=no"
+    fi
     exit 0
 fi
 
-# ===========================================================================
-# CHECK-ONLY MODE: print versions and exit
-# ===========================================================================
-if [ "${SPOTX_CHECK_ONLY:-}" = "1" ]; then
-    read_installed_version
-    resolve_latest_spotify
+# ANSI color codes for friendly terminal output
+CLR='\033[0m'
+BOLD='\033[1m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
 
-    echo
-    if [ -n "$INSTALLED_VER" ]; then
-        echo -e "  Installed Spotify version: ${GREEN}${BOLD}${INSTALLED_VER}${CLR}"
-    else
-        echo -e "  Installed Spotify version: ${RED}${BOLD}not installed${CLR}"
-    fi
-    echo -e "  Latest available version:  ${CYAN}${BOLD}${LATEST_VER:-unknown}${CLR}"
+info()    { echo -e "${CYAN}${BOLD}[INFO]${CLR} $*"; }
+success() { echo -e "${GREEN}${BOLD}[SUCCESS]${CLR} $*"; }
+warn()    { echo -e "${YELLOW}${BOLD}[WARNING]${CLR} $*"; }
+error()   { echo -e "${RED}${BOLD}[ERROR]${CLR} $*" >&2; }
 
-    if [ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" = "${LATEST_VER:-}" ]; then
-        echo -e "  Status: ${GREEN}${BOLD}up-to-date [OK]${CLR}"
-    else
-        echo -e "  Status: ${YELLOW}${BOLD}update available${CLR}"
-    fi
+echo -e "${CYAN}============================================${CLR}"
+echo -e "${CYAN}${BOLD}   SpotX-Termux - Container Setup (PRoot)   ${CLR}"
+echo -e "${CYAN}============================================${CLR}"
 
-    SPOTX_APPLIED="no"
-    if is_spotx_applied; then
-        SPOTX_APPLIED="yes"
-    fi
-    echo -e "  SpotX patch applied:       ${BOLD}${SPOTX_APPLIED}${CLR}"
-    if [ -n "${SPOTX_TERMUX_LATEST_VERSION:-}" ] && [ -n "${SPOTX_TERMUX_VERSION:-}" ] && [ "${SPOTX_TERMUX_VERSION}" != "unknown" ]; then
-        if [ "${SPOTX_TERMUX_VERSION}" = "${SPOTX_TERMUX_LATEST_VERSION}" ]; then
-            echo -e "  SpotX-Termux scripts:      ${GREEN}${BOLD}${SPOTX_TERMUX_VERSION}${CLR} [OK]"
-        else
-            echo -e "  SpotX-Termux scripts:      ${YELLOW}${BOLD}${SPOTX_TERMUX_VERSION}${CLR} (update available: ${CYAN}${BOLD}${SPOTX_TERMUX_LATEST_VERSION}${CLR})"
-        fi
-    else
-        echo -e "  SpotX-Termux scripts:      ${BOLD}${SPOTX_TERMUX_VERSION:-unknown}${CLR}"
-    fi
-    echo
-    exit 0
-fi
+export DEBIAN_FRONTEND=noninteractive
+
+ARCH="$(uname -m)"
+info "Detected architecture inside container: ${ARCH}"
 
 # ===========================================================================
 # FULL / UPDATE INSTALLATION
@@ -364,12 +346,8 @@ case "$ARCH" in
                 exit 1
             fi
 
-            # Helper to check if a file is a valid ELF binary (not a shell script from symlink overwrite)
-            is_valid_elf() {
-                local f="$1"
-                [ -f "$f" ] && [ "$(head -c 4 "$f" 2>/dev/null)" = $'\x7fELF' ]
-            }
-
+            # is_valid_elf also catches a binary overwritten by a shell script through the
+            # /usr/bin/spotify symlink (see the wrapper note below)
             if [ "${SPOTX_FORCE:-0}" != "1" ] && [ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" = "$LATEST_VER" ] && is_valid_elf /usr/share/spotify/spotify; then
                 success "Spotify ${INSTALLED_VER} is already installed, valid ELF binary, and up-to-date. Skipping download."
                 SPOTIFY_UPDATED=0
@@ -428,8 +406,8 @@ case "$ARCH" in
                 # Remove it now so our Box64 wrapper does not follow the symlink and overwrite /usr/share/spotify/spotify!
                 rm -f /usr/bin/spotify
 
-                # Remove stale xpui backup so SpotX makes a pristine backup of freshly extracted xpui.spa
-                rm -f /usr/share/spotify/Apps/xpui.spa.bak
+                # No backup cleanup needed: SpotX-Bash keeps Apps/xpui.bak + spotify.bak and
+                # refreshes them itself when it finds an unpatched binary (fresh extraction).
 
                 # Save installed version marker
                 mkdir -p "$(dirname "$VERSION_MARKER")"
@@ -674,4 +652,13 @@ exit $SPOTIFY_EXIT_CODE
 RUNNER
 
 chmod +x /usr/local/bin/spotify-termux
+
+# 7. Keep a copy of this script inside the container so the host can run
+#    '--probe' (doctor / updater) without network access
+mkdir -p "$(dirname "$GUEST_SETUP_INSTALLED")"
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ] && [ "${BASH_SOURCE[0]}" != "$GUEST_SETUP_INSTALLED" ]; then
+    cp -f "${BASH_SOURCE[0]}" "$GUEST_SETUP_INSTALLED" 2>/dev/null || true
+    chmod +x "$GUEST_SETUP_INSTALLED" 2>/dev/null || true
+fi
+
 success "Container setup finished completely and successfully!"

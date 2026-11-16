@@ -194,18 +194,32 @@ action_revert_spotx() {
 
     kill_spotify_processes
 
+    # SpotX-Bash backs up the client as Apps/xpui.bak + spotify.bak (both are needed:
+    # it patches the binary too). Its own --uninstall is authoritative; the local
+    # restore below mirrors it and is used when SpotX-Bash cannot be downloaded.
     info "Running SpotX uninstaller inside container..."
-    proot-distro login "$CONTAINER_NAME" -- bash -c '
-        if [ -f /usr/share/spotify/Apps/xpui.spa.bak ]; then
-            echo "[*] Restoring xpui.spa from backup..."
-            cp -f /usr/share/spotify/Apps/xpui.spa.bak /usr/share/spotify/Apps/xpui.spa
-            rm -f /usr/share/spotify/Apps/xpui.spa.bak
-            echo "[OK] xpui.spa successfully restored!"
-        else
-            echo "[*] Downloading SpotX-Bash official uninstaller..."
-            curl -fsSL https://raw.githubusercontent.com/SpotX-Official/SpotX-Bash/main/spotx.sh | bash -s -- --uninstall -P /usr/share/spotify || true
+    if ! proot-distro login "$CONTAINER_NAME" -- bash -c '
+        dir=/usr/share/spotify
+        if [ ! -f "$dir/Apps/xpui.bak" ] || [ ! -f "$dir/spotify.bak" ]; then
+            echo "[X] No SpotX backup found (Apps/xpui.bak + spotify.bak): nothing to restore." >&2
+            exit 2
         fi
-    '
+        tmp=$(mktemp)
+        if curl -fsSL https://raw.githubusercontent.com/SpotX-Official/SpotX-Bash/main/spotx.sh -o "$tmp" 2>/dev/null \
+            && [ "$(head -c 2 "$tmp")" = "#!" ] \
+            && SPOTX_BUILD_MODE=1 bash "$tmp" --uninstall --noninteractive -P "$dir"; then
+            rm -f "$tmp"
+            exit 0
+        fi
+        rm -f "$tmp"
+        echo "[*] Official uninstaller unavailable: restoring SpotX backups locally..."
+        cp -f "$dir/spotify.bak" "$dir/spotify" && cp -f "$dir/Apps/xpui.bak" "$dir/Apps/xpui.spa" || exit 1
+        rm -f "$dir/spotify.bak" "$dir/Apps/xpui.bak"
+        rm -rf "$dir/Apps/xpui"
+    '; then
+        error "SpotX could not be reverted. To get a clean client, run: spotify-update --force --skip-spotx"
+        return 1
+    fi
 
     success "SpotX patch removed. Spotify restored to official stock state."
     info "Log saved to ${LOG_FILE}"
@@ -227,7 +241,7 @@ action_remove_spotify_only() {
             rm -rf /usr/share/spotify \
                    /usr/bin/spotify \
                    /usr/local/bin/spotify-termux \
-                   /etc/spotx-termux \
+                   /usr/local/lib/spotx-termux \
                    /etc/apt/sources.list.d/spotify.list \
                    /etc/apt/trusted.gpg.d/spotify.gpg \
                    /root/.config/spotify \

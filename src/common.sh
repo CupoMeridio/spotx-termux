@@ -10,7 +10,10 @@
 
 # Bumped whenever scripts start relying on new functions from this library, so a
 # script loaded together with an older installed copy can detect the mismatch.
-SPOTX_LIB_API=2
+# Each script checks the minimum it needs:
+#   2 - shared tables, fetch/sync helpers, stop_spotx_session (start, uninstall)
+#   3 - probe_container (doctor, update)
+SPOTX_LIB_API=3
 
 # ------------------------------------------------------------------------------
 # 1. Environment & Architecture Detection
@@ -251,6 +254,53 @@ is_container_installed() {
         fi
     fi
     return 1
+}
+
+# Copy of guest-setup.sh that guest-setup keeps inside the container (see its --probe mode)
+GUEST_SETUP_INSTALLED="/usr/local/lib/spotx-termux/guest-setup.sh"
+GUEST_PROBE_KEYS=(GUEST_PROBE_API GUEST_RESPONSIVE GUEST_BOX64_VER GUEST_BOX64_GPU GUEST_WM
+                  GUEST_ELF GUEST_VER GUEST_SPOTX GUEST_RUNNER GUEST_PLAYERCTL)
+
+# probe_container
+# Runs 'guest-setup.sh --probe' inside the container and sets the GUEST_* variables
+# (all empty if the container cannot be probed). This is the only place where the
+# host learns the container state: version, ELF integrity, SpotX patch, runner...
+# Script source, in order: repo checkout (development), the copy installed inside
+# the container (offline), a fresh copy from GitHub (installs predating the probe).
+probe_container() {
+    local key out="" staged=""
+    for key in "${GUEST_PROBE_KEYS[@]}"; do
+        printf -v "$key" '%s' ""
+    done
+
+    if [ -z "$SPOTX_REPO_ROOT" ]; then
+        out=$(proot-distro login "$CONTAINER_NAME" -- bash "$GUEST_SETUP_INSTALLED" --probe 2>/dev/null || true)
+    fi
+    if [[ "$out" != *"GUEST_PROBE_API="* ]]; then
+        out=""
+        staged="${TERMUX_TMP}/spotx-guest-probe.$$.sh"
+        mkdir -p "$TERMUX_TMP" 2>/dev/null || true
+        # Run a staged copy only if it really supports --probe: an older guest-setup.sh
+        # would ignore the flag and start a full installation instead.
+        if fetch_repo_file "src/guest-setup.sh" "$staged" && grep -q "SPOTX_PROBE_API=" "$staged"; then
+            out=$(proot-distro login "$CONTAINER_NAME" --shared-tmp -- bash "/tmp/${staged##*/}" --probe 2>/dev/null || true)
+        fi
+        rm -f "$staged" 2>/dev/null || true
+    fi
+
+    local line val k
+    while IFS= read -r line; do
+        key="${line%%=*}"
+        val="${line#*=}"
+        for k in "${GUEST_PROBE_KEYS[@]}"; do
+            if [ "$key" = "$k" ]; then
+                printf -v "$key" '%s' "$val"
+                break
+            fi
+        done
+    done <<< "$out"
+
+    [ "$GUEST_RESPONSIVE" = "yes" ]
 }
 
 # ------------------------------------------------------------------------------

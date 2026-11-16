@@ -29,7 +29,7 @@ if [ -z "$_SPOTX_LIB" ] || [ ! -f "$_SPOTX_LIB" ]; then
 fi
 # shellcheck source=/dev/null
 source "$_SPOTX_LIB"
-if [ "${SPOTX_LIB_API:-1}" -lt 2 ]; then
+if [ "${SPOTX_LIB_API:-1}" -lt 3 ]; then
     echo "[X] Error: the installed SpotX-Termux library is outdated (${_SPOTX_LIB})." >&2
     echo "    Please run 'spotify-update' to repair the installation." >&2
     exit 1
@@ -425,206 +425,109 @@ else
     echo -e "  ${SYM_PASS} Container '${CONTAINER_NAME}':         ${GREEN}installed${CLR}"
     record_pass
 
-    # Single-pass container probe to eliminate multi-login PRoot overhead
-    CONTAINER_PROBE_OUTPUT=$(proot-distro login "$CONTAINER_NAME" -- bash -c '
-        echo "GUEST_RESPONSIVE=yes"
-
-        # Box64 check
-        if command -v box64 >/dev/null 2>&1; then
-            echo "GUEST_BOX64_VER=$(box64 -v 2>&1 | head -1)"
-        else
-            echo "GUEST_BOX64_VER="
-        fi
-        if grep -E "^BOX64_INPROCESSGPU=0" /etc/box64.box64rc /root/.box64rc >/dev/null 2>&1; then
-            echo "GUEST_BOX64_GPU=0"
-        else
-            echo "GUEST_BOX64_GPU=other"
-        fi
-
-        # Window Manager check
-        if command -v matchbox-window-manager >/dev/null 2>&1; then
-            echo "GUEST_WM=matchbox"
-        elif command -v openbox >/dev/null 2>&1; then
-            echo "GUEST_WM=openbox"
-        else
-            echo "GUEST_WM=none"
-        fi
-
-        # Spotify ELF check
-        if [ ! -f /usr/share/spotify/spotify ]; then
-            echo "GUEST_ELF=missing"
-        elif head -c 4 /usr/share/spotify/spotify 2>/dev/null | grep -q "ELF"; then
-            echo "GUEST_ELF=valid_elf"
-        else
-            echo "GUEST_ELF=corrupted"
-        fi
-
-        # Installed Version check
-        if [ -f /usr/share/spotify/.spotx-termux-version ]; then
-            echo "GUEST_VER=$(cat /usr/share/spotify/.spotx-termux-version 2>/dev/null | tr -d "[:space:]")"
-        elif [ -f /root/.spotify-installed-version ]; then
-            echo "GUEST_VER=$(cat /root/.spotify-installed-version 2>/dev/null | tr -d "[:space:]")"
-        elif [ -f /usr/share/doc/spotify-client/changelog.Debian.gz ]; then
-            echo "GUEST_VER=$(zcat /usr/share/doc/spotify-client/changelog.Debian.gz 2>/dev/null | grep -m1 "^spotify-client" | cut -d"(" -f2 | cut -d")" -f1 || true)"
-        elif command -v dpkg-query >/dev/null 2>&1; then
-            echo "GUEST_VER=$(dpkg-query -W -f="\${Version}" spotify-client 2>/dev/null | tr -d "[:space:]")"
-        elif command -v dpkg >/dev/null 2>&1; then
-            echo "GUEST_VER=$(dpkg -s spotify-client 2>/dev/null | grep -m1 "^Version:" | cut -d" " -f2 | tr -d "[:space:]" || true)"
-        else
-            echo "GUEST_VER="
-        fi
-
-        # SpotX Patch check
-        if [ -f /usr/share/spotify/Apps/xpui.bak ] || \
-           [ -f /usr/share/spotify/Apps/xpui.spa.bak ] || \
-           [ -f /usr/share/spotify/spotify.bak ] || \
-           ( [ -f /usr/share/spotify/Apps/xpui.spa ] && unzip -p /usr/share/spotify/Apps/xpui.spa 2>/dev/null | grep -Fq "SpotX" ); then
-            echo "GUEST_SPOTX=applied"
-        elif [ -f /usr/share/spotify/Apps/xpui.spa ]; then
-            echo "GUEST_SPOTX=not_applied"
-        else
-            echo "GUEST_SPOTX=missing_xpui"
-        fi
-
-        # Runner script check
-        if [ -x /usr/local/bin/spotify-termux ]; then
-            echo "GUEST_RUNNER=yes"
-        else
-            echo "GUEST_RUNNER=no"
-        fi
-
-        # Playerctl media controls check
-        if command -v playerctl >/dev/null 2>&1; then
-            echo "GUEST_PLAYERCTL=yes"
-        else
-            echo "GUEST_PLAYERCTL=no"
-        fi
-    ' 2>/dev/null || true)
-
-    GUEST_RESPONSIVE=""
-    GUEST_BOX64_VER=""
-    GUEST_BOX64_GPU=""
-    GUEST_WM=""
-    GUEST_ELF=""
-    GUEST_VER=""
-    GUEST_SPOTX=""
-    GUEST_RUNNER=""
-    GUEST_PLAYERCTL=""
-
-    if [ -n "$CONTAINER_PROBE_OUTPUT" ]; then
-        while IFS='=' read -r key val; do
-            case "$key" in
-                GUEST_RESPONSIVE) GUEST_RESPONSIVE="$val" ;;
-                GUEST_BOX64_VER)   GUEST_BOX64_VER="$val" ;;
-                GUEST_BOX64_GPU)   GUEST_BOX64_GPU="$val" ;;
-                GUEST_WM)          GUEST_WM="$val" ;;
-                GUEST_ELF)         GUEST_ELF="$val" ;;
-                GUEST_VER)         GUEST_VER="$val" ;;
-                GUEST_SPOTX)       GUEST_SPOTX="$val" ;;
-                GUEST_RUNNER)      GUEST_RUNNER="$val" ;;
-                GUEST_PLAYERCTL)   GUEST_PLAYERCTL="$val" ;;
-            esac
-        done <<< "$CONTAINER_PROBE_OUTPUT"
+    # Single PRoot login: 'guest-setup.sh --probe' is the source of truth for container state
+    if probe_container; then
+        echo -e "  ${SYM_PASS} PRoot Container:   ${GREEN}responsive${CLR} ${DIM}(${CONTAINER_NAME})${CLR}"
+        record_pass
+    else
+        echo -e "  ${SYM_FAIL} PRoot Container:   ${RED}cannot be inspected (${CONTAINER_NAME})${CLR}"
+        record_fail "Container Probe Failed" "Login failed, or the container probe is unavailable (offline install from an older version). Run 'spotify-update'; if it persists, 'spotify-uninstall --full' and reinstall."
     fi
 
+    # Detailed checks only make sense when the probe answered
     if [ "$GUEST_RESPONSIVE" = "yes" ]; then
-        echo -e "  ${SYM_PASS} PRoot Container:   ${GREEN}responsive${CLR} ${DIM}(ubuntu)${CLR}"
-        record_pass
-    else
-        echo -e "  ${SYM_FAIL} PRoot Container:   ${RED}login failed (${CONTAINER_NAME})${CLR}"
-        record_fail "Container Login Failed" "PRoot container is corrupted or busy. Run 'spotify-uninstall --full' and reinstall."
-    fi
 
-    # Box64 (on ARM64)
-    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-        if [ -n "$GUEST_BOX64_VER" ]; then
-            echo -e "  ${SYM_PASS} Box64 Emulator:    ${GREEN}ready${CLR} ${DIM}(ARM64 translation)${CLR}"
-            record_pass
-        else
-            echo -e "  ${SYM_FAIL} Box64 Emulator:    ${RED}missing${CLR}"
-            record_fail "Box64 Missing" "Run 'spotify-update' to install or repair Box64 inside Ubuntu."
+        # Box64 (on ARM64)
+        if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+            if [ -n "$GUEST_BOX64_VER" ]; then
+                echo -e "  ${SYM_PASS} Box64 Emulator:    ${GREEN}ready${CLR} ${DIM}(ARM64 translation)${CLR}"
+                record_pass
+            else
+                echo -e "  ${SYM_FAIL} Box64 Emulator:    ${RED}missing${CLR}"
+                record_fail "Box64 Missing" "Run 'spotify-update' to install or repair Box64 inside Ubuntu."
+            fi
+
+            if [ "$GUEST_BOX64_GPU" = "0" ]; then
+                echo -e "  ${SYM_PASS} Box64 GPU Config:  ${GREEN}disabled (0)${CLR} ${DIM}(crash-safe)${CLR}"
+                record_pass
+            else
+                echo -e "  ${SYM_WARN} Box64 GPU Config:  ${YELLOW}not configured to 0${CLR}"
+                record_warn "Box64 In-Process GPU" "Run 'spotify-update' to configure /etc/box64.box64rc"
+            fi
         fi
 
-        if [ "$GUEST_BOX64_GPU" = "0" ]; then
-            echo -e "  ${SYM_PASS} Box64 GPU Config:  ${GREEN}disabled (0)${CLR} ${DIM}(crash-safe)${CLR}"
+        # Window Manager
+        if [ "$GUEST_WM" = "matchbox" ]; then
+            echo -e "  ${SYM_PASS} Window Manager:    ${GREEN}ready${CLR} ${DIM}(matchbox fullscreen)${CLR}"
+            record_pass
+        elif [ "$GUEST_WM" = "openbox" ]; then
+            echo -e "  ${SYM_PASS} Window Manager:    ${GREEN}ready${CLR} ${DIM}(openbox)${CLR}"
             record_pass
         else
-            echo -e "  ${SYM_WARN} Box64 GPU Config:  ${YELLOW}not configured to 0${CLR}"
-            record_warn "Box64 In-Process GPU" "Run 'spotify-update' to configure /etc/box64.box64rc"
+            echo -e "  ${SYM_WARN} Window Manager:    ${YELLOW}none found${CLR}"
+            record_warn "Window Manager Missing" "Run 'proot-distro login ${CONTAINER_NAME} -- apt-get install -y matchbox-window-manager'"
         fi
-    fi
 
-    # Window Manager
-    if [ "$GUEST_WM" = "matchbox" ]; then
-        echo -e "  ${SYM_PASS} Window Manager:    ${GREEN}ready${CLR} ${DIM}(matchbox fullscreen)${CLR}"
-        record_pass
-    elif [ "$GUEST_WM" = "openbox" ]; then
-        echo -e "  ${SYM_PASS} Window Manager:    ${GREEN}ready${CLR} ${DIM}(openbox)${CLR}"
-        record_pass
-    else
-        echo -e "  ${SYM_WARN} Window Manager:    ${YELLOW}none found${CLR}"
-        record_warn "Window Manager Missing" "Run 'proot-distro login ${CONTAINER_NAME} -- apt-get install -y matchbox-window-manager'"
-    fi
+        # Spotify Binary & ELF integrity
+        case "$GUEST_ELF" in
+            valid_elf)
+                echo -e "  ${SYM_PASS} Spotify Binary:    ${GREEN}valid ELF${CLR} ${DIM}(x86_64)${CLR}"
+                record_pass
+                ;;
+            missing)
+                echo -e "  ${SYM_FAIL} Spotify Binary:    ${RED}missing${CLR}"
+                record_fail "Spotify Binary Missing" "Run 'spotify-update' to download and install Spotify Desktop."
+                ;;
+            *)
+                echo -e "  ${SYM_FAIL} Spotify Binary:    ${RED}corrupted or non-ELF${CLR}"
+                record_fail "Corrupted Spotify Binary" "Run 'spotify-update' to re-download the clean Spotify package."
+                ;;
+        esac
 
-    # Spotify Binary & ELF integrity
-    case "$GUEST_ELF" in
-        valid_elf)
-            echo -e "  ${SYM_PASS} Spotify Binary:    ${GREEN}valid ELF${CLR} ${DIM}(x86_64)${CLR}"
+        # Spotify Version
+        if [ -n "$GUEST_VER" ]; then
+            echo -e "  ${SYM_PASS} Installed Version: ${GREEN}${GUEST_VER}${CLR}"
             record_pass
-            ;;
-        missing)
-            echo -e "  ${SYM_FAIL} Spotify Binary:    ${RED}missing${CLR}"
-            record_fail "Spotify Binary Missing" "Run 'spotify-update' to download and install Spotify Desktop."
-            ;;
-        *)
-            echo -e "  ${SYM_FAIL} Spotify Binary:    ${RED}corrupted or non-ELF${CLR}"
-            record_fail "Corrupted Spotify Binary" "Run 'spotify-update' to re-download the clean Spotify package."
-            ;;
-    esac
+        else
+            echo -e "  ${SYM_WARN} Installed Version: ${YELLOW}unable to determine${CLR}"
+        fi
 
-    # Spotify Version
-    if [ -n "$GUEST_VER" ]; then
-        echo -e "  ${SYM_PASS} Installed Version: ${GREEN}${GUEST_VER}${CLR}"
-        record_pass
-    else
-        echo -e "  ${SYM_WARN} Installed Version: ${YELLOW}unable to determine${CLR}"
-    fi
+        # SpotX Patch
+        case "$GUEST_SPOTX" in
+            applied)
+                echo -e "  ${SYM_PASS} SpotX Patch:       ${GREEN}applied [OK]${CLR} ${DIM}(xpui.spa)${CLR}"
+                record_pass
+                ;;
+            not_applied)
+                echo -e "  ${SYM_WARN} SpotX Patch:       ${YELLOW}stock (not applied)${CLR}"
+                record_warn "SpotX Patch Not Applied" "Run 'spotify-update --spotx-only' to apply SpotX modifications."
+                ;;
+            missing_xpui)
+                echo -e "  ${SYM_WARN} SpotX Patch:       ${YELLOW}xpui.spa not found${CLR}"
+                record_warn "Missing xpui.spa" "Run 'spotify-update' to reinstall Spotify and apply SpotX."
+                ;;
+            *)
+                echo -e "  ${SYM_INFO} SpotX Patch:       ${DIM}unable to inspect${CLR}"
+                ;;
+        esac
 
-    # SpotX Patch
-    case "$GUEST_SPOTX" in
-        applied)
-            echo -e "  ${SYM_PASS} SpotX Patch:       ${GREEN}applied [OK]${CLR} ${DIM}(xpui.spa)${CLR}"
+        # Container Runner
+        if [ "$GUEST_RUNNER" = "yes" ]; then
+            echo -e "  ${SYM_PASS} Container Runner:  ${GREEN}ready${CLR} ${DIM}(spotify-termux)${CLR}"
             record_pass
-            ;;
-        not_applied)
-            echo -e "  ${SYM_WARN} SpotX Patch:       ${YELLOW}stock (not applied)${CLR}"
-            record_warn "SpotX Patch Not Applied" "Run 'spotify-update --spotx-only' to apply SpotX modifications."
-            ;;
-        missing_xpui)
-            echo -e "  ${SYM_WARN} SpotX Patch:       ${YELLOW}xpui.spa not found${CLR}"
-            record_warn "Missing xpui.spa" "Run 'spotify-update' to reinstall Spotify and apply SpotX."
-            ;;
-        *)
-            echo -e "  ${SYM_INFO} SpotX Patch:       ${DIM}unable to inspect${CLR}"
-            ;;
-    esac
+        else
+            echo -e "  ${SYM_FAIL} Container Runner:  ${RED}missing${CLR}"
+            record_fail "Missing Container Runner" "Run 'spotify-update' to regenerate /usr/local/bin/spotify-termux."
+        fi
 
-    # Container Runner
-    if [ "$GUEST_RUNNER" = "yes" ]; then
-        echo -e "  ${SYM_PASS} Container Runner:  ${GREEN}ready${CLR} ${DIM}(spotify-termux)${CLR}"
-        record_pass
-    else
-        echo -e "  ${SYM_FAIL} Container Runner:  ${RED}missing${CLR}"
-        record_fail "Missing Container Runner" "Run 'spotify-update' to regenerate /usr/local/bin/spotify-termux."
-    fi
-
-    # MPRIS Media Controls (playerctl)
-    if [ "$GUEST_PLAYERCTL" = "yes" ]; then
-        echo -e "  ${SYM_PASS} MPRIS Controls:    ${GREEN}ready${CLR} ${DIM}(playerctl bridge)${CLR}"
-        record_pass
-    else
-        echo -e "  ${SYM_WARN} MPRIS Controls:    ${YELLOW}playerctl missing${CLR}"
-        record_warn "MPRIS Media Controls Missing" "Run 'spotify-update' to install playerctl inside Ubuntu."
+        # MPRIS Media Controls (playerctl)
+        if [ "$GUEST_PLAYERCTL" = "yes" ]; then
+            echo -e "  ${SYM_PASS} MPRIS Controls:    ${GREEN}ready${CLR} ${DIM}(playerctl bridge)${CLR}"
+            record_pass
+        else
+            echo -e "  ${SYM_WARN} MPRIS Controls:    ${YELLOW}playerctl missing${CLR}"
+            record_warn "MPRIS Media Controls Missing" "Run 'spotify-update' to install playerctl inside Ubuntu."
+        fi
     fi
 fi
 

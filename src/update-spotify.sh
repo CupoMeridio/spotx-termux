@@ -29,7 +29,7 @@ fi
 # must also work when the installed library is missing or older than this script
 # (e.g. a previous update replaced the scripts but not common.sh). In that case
 # load a fresh copy of the library from the repository for this run.
-if [ "${SPOTX_LIB_API:-0}" -lt 2 ]; then
+if [ "${SPOTX_LIB_API:-0}" -lt 3 ]; then
     _fresh_lib="${PREFIX:-/data/data/com.termux/files/usr}/tmp/spotx-common.update.$$.sh"
     if curl -fsSL "https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/common.sh?t=$(date +%s)" -o "$_fresh_lib" 2>/dev/null \
         && [ "$(head -c 2 "$_fresh_lib" 2>/dev/null)" = "#!" ]; then
@@ -42,7 +42,7 @@ if [ "${SPOTX_LIB_API:-0}" -lt 2 ]; then
         echo "    copy could not be downloaded. Check your connection and retry." >&2
         exit 1
     fi
-    if [ "${SPOTX_LIB_API:-0}" -lt 2 ]; then
+    if [ "${SPOTX_LIB_API:-0}" -lt 3 ]; then
         echo "[X] Error: the SpotX-Termux library on GitHub is older than this updater." >&2
         exit 1
     fi
@@ -156,58 +156,12 @@ get_latest_spotx_version() {
     echo "${ver:-unknown}"
 }
 
-# Helper: read installed Spotify version from container rootfs or changelog
-get_installed_spotify_version() {
-    local direct_marker="${PREFIX:-/data/data/com.termux/files/usr}/var/lib/proot-distro/installed-rootfs/${CONTAINER_NAME}/usr/share/spotify/.spotx-termux-version"
-    local direct_doc="${PREFIX:-/data/data/com.termux/files/usr}/var/lib/proot-distro/installed-rootfs/${CONTAINER_NAME}/usr/share/doc/spotify-client/changelog.Debian.gz"
-    local direct_bin="${PREFIX:-/data/data/com.termux/files/usr}/var/lib/proot-distro/installed-rootfs/${CONTAINER_NAME}/usr/share/spotify/spotify"
-    local ver=""
-
-    if [ -f "$direct_marker" ]; then
-        ver=$(cat "$direct_marker" 2>/dev/null | tr -d '[:space:]' || true)
-    fi
-    if [ -z "$ver" ] && [ -f "$direct_doc" ]; then
-        ver=$(gzip -dc "$direct_doc" 2>/dev/null | awk '/^spotify-client \(/ { gsub(/[()]/,"",$2); print $2; exit }' || true)
-    fi
-    if [ -z "$ver" ] && command -v proot-distro >/dev/null 2>&1; then
-        ver=$(proot-distro login "$CONTAINER_NAME" -- bash -c 'cat /usr/share/spotify/.spotx-termux-version 2>/dev/null || (gzip -dc /usr/share/doc/spotify-client/changelog.Debian.gz 2>/dev/null | awk '\''/^spotify-client \(/ { gsub(/[()]/,"",$2); print $2; exit }'\'')' 2>/dev/null | tr -d '[:space:]' || true)
-    fi
-    if [ -z "$ver" ] && [ -f "$direct_bin" ]; then
-        ver="installed (unversioned)"
-    fi
-    echo "${ver:-not installed}"
-}
-
 # Helper: fetch latest Spotify client version from Debian repository metadata
 get_latest_spotify_version() {
     local ver=""
     ver=$(curl -fsSL --connect-timeout 3 --max-time 6 https://repository.spotify.com/dists/stable/non-free/binary-amd64/Packages 2>/dev/null | \
         awk '/^Package: spotify-client$/{p=1} p && /^Version:/{print $2; exit}' || true)
     echo "${ver:-unknown}"
-}
-
-# Helper: check SpotX patch status on xpui.spa
-get_spotx_patch_status() {
-    local direct_spa="${PREFIX:-/data/data/com.termux/files/usr}/var/lib/proot-distro/installed-rootfs/${CONTAINER_NAME}/usr/share/spotify/Apps/xpui.spa"
-    if [ -f "$direct_spa" ]; then
-        if grep -Fq "SpotX" "$direct_spa" 2>/dev/null; then
-            echo "applied"
-            return 0
-        elif command -v unzip >/dev/null 2>&1 && unzip -p "$direct_spa" xpui.js 2>/dev/null | grep -Fq "SpotX"; then
-            echo "applied"
-            return 0
-        else
-            echo "not_applied"
-            return 0
-        fi
-    fi
-    if command -v proot-distro >/dev/null 2>&1; then
-        if proot-distro login "$CONTAINER_NAME" -- bash -c 'grep -Fq "SpotX" /usr/share/spotify/Apps/xpui.spa 2>/dev/null' 2>/dev/null; then
-            echo "applied"
-            return 0
-        fi
-    fi
-    echo "missing"
 }
 
 echo -e "${CYAN}============================================${CLR}"
@@ -217,9 +171,23 @@ echo -e "${CYAN}============================================${CLR}"
 info "Checking component versions..."
 
 SPOTX_TERMUX_LATEST_VERSION="$(get_latest_spotx_version)"
-SPOTIFY_INSTALLED_VER="$(get_installed_spotify_version)"
+# Container state comes from the guest probe: single source of truth, one PRoot login
+if ! probe_container; then
+    warn "Could not inspect the container; Spotify will be treated as not installed."
+fi
+if [ -n "$GUEST_VER" ]; then
+    SPOTIFY_INSTALLED_VER="$GUEST_VER"
+elif [ "$GUEST_ELF" = "valid_elf" ] || [ "$GUEST_ELF" = "corrupted" ]; then
+    SPOTIFY_INSTALLED_VER="installed (unversioned)"
+else
+    SPOTIFY_INSTALLED_VER="not installed"
+fi
+case "$GUEST_SPOTX" in
+    applied)               SPOTX_PATCH_STATUS="applied" ;;
+    not_applied|unknown)   SPOTX_PATCH_STATUS="not_applied" ;;
+    *)                     SPOTX_PATCH_STATUS="missing" ;;
+esac
 SPOTIFY_LATEST_VER="$(get_latest_spotify_version)"
-SPOTX_PATCH_STATUS="$(get_spotx_patch_status)"
 
 # Evaluate Host Scripts Status
 HOST_UPDATE_AVAIL=0
@@ -236,6 +204,11 @@ fi
 SPOTIFY_UPDATE_AVAIL=0
 if [ "$SPOTIFY_INSTALLED_VER" = "not installed" ]; then
     SPOTIFY_STATUS="${RED}${BOLD}Not installed${CLR}"
+    SPOTIFY_UPDATE_AVAIL=1
+elif [ "$GUEST_ELF" = "corrupted" ]; then
+    # Same version but a broken binary: without this the updater would report
+    # "up-to-date" and never repair it (guest-setup re-downloads on a non-ELF binary)
+    SPOTIFY_STATUS="${RED}${BOLD}Corrupted binary (will be re-downloaded)${CLR}"
     SPOTIFY_UPDATE_AVAIL=1
 elif [ -z "$SPOTIFY_LATEST_VER" ] || [ "$SPOTIFY_LATEST_VER" = "unknown" ]; then
     SPOTIFY_STATUS="${DIM}Check skipped (offline/unreachable)${CLR}"
@@ -416,12 +389,10 @@ stop_spotx_session
 # Run inside PRoot container with appropriate flags
 info "[3/3] Updating Spotify and SpotX inside container '${CONTAINER_NAME}'..."
 proot-distro login "$CONTAINER_NAME" --shared-tmp -- \
-    env SPOTX_CHECK_ONLY="0" \
-        SPOTX_ONLY="$SPOTX_ONLY" \
+    env SPOTX_ONLY="$SPOTX_ONLY" \
         SPOTX_SKIP="$SPOTX_SKIP" \
         SPOTX_FORCE="$SPOTX_FORCE" \
         SPOTX_TERMUX_VERSION="$SPOTX_TERMUX_VERSION" \
-        SPOTX_TERMUX_LATEST_VERSION="$SPOTX_TERMUX_LATEST_VERSION" \
         bash /tmp/spotx-guest-setup.sh
 
 success "Update process finished! Log saved to ${LOG_FILE}"
