@@ -167,6 +167,7 @@ section "common.sh: wrappers and shortcuts"
     install_wrappers
     install_widget_shortcuts >/dev/null 2>&1
     printf '#!/bin/bash\necho "args: $*"\n' > "$HOME/start-spotify.sh"
+    chmod +x "$HOME/start-spotify.sh"
     echo "stop=$(bash "$TERMUX_BIN/spotify-stop" a b)"
     echo "plain=$(bash "$TERMUX_BIN/spotify" --version)"
     echo "widget=$(bash "$SHORTCUTS_DIR/Spotify-Stop")"
@@ -310,6 +311,7 @@ out="$(new_sandbox; make_fake_github 2026.12.01; unset SPOTX_REPO_REF
 assert_eq "no tag yet: installs from main as before" "SpotX-Termux 2026.12.01" "$out"
 out="$(new_sandbox; make_fake_github 2026.12.01; unset SPOTX_REPO_REF
        printf '#!/usr/bin/env bash\necho "INSTALLED-UNINSTALLER args=$*"\n' > "$HOME/uninstall-spotify.sh"
+       chmod +x "$HOME/uninstall-spotify.sh"
        rm -f "$SANDBOX/gh/main/uninstall.sh"   # GitHub copy unavailable (offline)
        bash -c "$(cat "$REPO/install.sh")" install.sh --uninstall --full 2>&1)"
 assert_eq "--uninstall prefers the installed uninstaller (works offline)" "INSTALLED-UNINSTALLER args=--full" "$out"
