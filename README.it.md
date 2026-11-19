@@ -274,14 +274,6 @@ shellcheck --severity=warning install.sh uninstall.sh src/*.sh src/guest/*.sh te
 
 Entrambi vengono eseguiti automaticamente a ogni push e pull request (`.github/workflows/ci.yml`). Lanciando installer o updater da un clone locale, gli script usano i file del repository invece di scaricarli da GitHub.
 
-### Pubblicare una release
-Gli utenti non scaricano mai dal ramo `main`, che cambia di continuo: l'installer e `spotify-update` leggono da `main` solo il file `VERSION`, poi scaricano ogni file dal tag immutabile `v<VERSION>`. Così una push in corso non può mai mescolare file di versioni diverse.
-
-1. Aumenta `VERSION` (CalVer `YYYY.MM.DD`, eventualmente `.N` per una seconda release nello stesso giorno) nella stessa push delle modifiche.
-2. Fai push su `main`. Quando i controlli della CI passano, il job `tag-release` crea il tag `v<VERSION>`.
-
-Una push che **non** cambia `VERSION` non è una release: gli utenti continuano a ricevere la versione taggata in precedenza. Finché il tag non esiste (per esempio mentre la CI è in esecuzione), installer e updater ripiegano su `main`.
-
 ---
 
 ## Risoluzione Problemi & Consigli

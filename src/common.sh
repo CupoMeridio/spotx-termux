@@ -18,7 +18,7 @@
 #   3 - probe_container (doctor)
 #   4 - stage_guest_bundle (update)
 #   5 - version_gt (update)
-#   6 - use_release_ref / SPOTX_REPO_BASE (update)
+#   6 - stage_host_scripts / install_staged_host_scripts (install)
 SPOTX_LIB_API=6
 
 # ------------------------------------------------------------------------------
@@ -33,12 +33,7 @@ ARCH="$(uname -m 2>/dev/null || echo 'unknown')"
 # ------------------------------------------------------------------------------
 # 2. Project Constants, Shared Paths & IPC Endpoints
 # ------------------------------------------------------------------------------
-# Downloads come from SPOTX_REPO_BASE/<ref>. The ref is "main" until use_release_ref
-# pins it to an immutable release tag; an exported SPOTX_REPO_REF (set by the
-# bootstrapped installer) is inherited so every file comes from the same snapshot.
-SPOTX_REPO_BASE="${SPOTX_REPO_BASE:-https://raw.githubusercontent.com/CupoMeridio/spotx-termux}"
-SPOTX_REPO_REF="${SPOTX_REPO_REF:-main}"
-SPOTX_REPO_RAW="${SPOTX_REPO_BASE}/${SPOTX_REPO_REF}"
+SPOTX_REPO_RAW="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main"
 CONTAINER_NAME="ubuntu"
 TERMUX_SHEBANG="#!/data/data/com.termux/files/usr/bin/bash"
 
@@ -460,29 +455,6 @@ missing_pkgs() {
     echo "${missing[*]}"
 }
 
-# Release pinning
-# Every release is an immutable git tag "v<VERSION>", created by CI once the checks
-# pass on main (see .github/workflows/ci.yml). Reading only VERSION from main and
-# everything else from that tag guarantees a consistent set of files even while
-# main is being pushed to. Without the tag (not created yet) downloads stay on main.
-latest_published_version() {
-    local ver=""
-    ver=$(curl -fsSL --connect-timeout 3 --max-time 6 "${SPOTX_REPO_BASE}/main/VERSION?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
-    is_valid_version "$ver" || ver=""
-    echo "${ver:-unknown}"
-}
-
-# use_release_ref <version>: pins SPOTX_REPO_REF/SPOTX_REPO_RAW to tag v<version>
-use_release_ref() {
-    local ver="$1" tagged=""
-    is_valid_version "$ver" || return 1
-    tagged=$(curl -fsSL --connect-timeout 3 --max-time 6 "${SPOTX_REPO_BASE}/v${ver}/VERSION" 2>/dev/null | tr -d '[:space:]' || true)
-    [ "$tagged" = "$ver" ] || return 1
-    SPOTX_REPO_REF="v${ver}"
-    SPOTX_REPO_RAW="${SPOTX_REPO_BASE}/${SPOTX_REPO_REF}"
-    export SPOTX_REPO_REF
-}
-
 # fetch_repo_file <repo-relative path> <destination> [validator]
 # Copies the file from the local checkout when running from one, otherwise
 # downloads it from GitHub. The destination is replaced atomically and only if
@@ -508,35 +480,55 @@ fetch_repo_file() {
     return 1
 }
 
-# Installs all host scripts as one unit: everything is fetched and validated
+# Host scripts are installed as one unit: everything is fetched and validated
 # first, and nothing is replaced unless every file is valid. A half-updated set
 # (e.g. new scripts with an old common.sh) would otherwise break every command.
-sync_host_scripts() {
-    local entry rel dest staged=() failed=()
+# Staged copies sit next to their destination (<dest>.staged.<pid>), so the final
+# rename is atomic. The installer stages at the very start and installs at the end,
+# so every file comes from the same moment even though the setup takes minutes.
+
+# stage_host_scripts: fetches every host script; on failure nothing is left staged
+stage_host_scripts() {
+    local entry rel dest failed=()
     for entry in "${SPOTX_HOST_FILES[@]}"; do
         rel="${entry%%|*}"
         dest="${entry#*|}"
-        if fetch_repo_file "$rel" "${dest}.staged.$$"; then
-            staged+=("$dest")
-        else
-            failed+=("$rel")
-        fi
+        fetch_repo_file "$rel" "${dest}.staged.$$" || failed+=("$rel")
     done
 
     if [ ${#failed[@]} -gt 0 ]; then
-        for dest in "${staged[@]}"; do
-            rm -f "${dest}.staged.$$" 2>/dev/null || true
-        done
+        discard_staged_host_scripts
         warn "Could not fetch a valid copy of: ${failed[*]}"
         warn "Installed scripts were left unchanged."
         return 1
     fi
+    return 0
+}
 
-    for dest in "${staged[@]}"; do
+# install_staged_host_scripts: replaces the installed scripts with the staged set
+install_staged_host_scripts() {
+    local entry dest
+    for entry in "${SPOTX_HOST_FILES[@]}"; do
+        dest="${entry#*|}"
+        [ -f "${dest}.staged.$$" ] || return 1
+    done
+    for entry in "${SPOTX_HOST_FILES[@]}"; do
+        dest="${entry#*|}"
         chmod +x "${dest}.staged.$$" 2>/dev/null || true
         mv -f "${dest}.staged.$$" "$dest"
     done
     return 0
+}
+
+discard_staged_host_scripts() {
+    local entry
+    for entry in "${SPOTX_HOST_FILES[@]}"; do
+        rm -f "${entry#*|}.staged.$$" 2>/dev/null || true
+    done
+}
+
+sync_host_scripts() {
+    stage_host_scripts && install_staged_host_scripts
 }
 
 # write_launcher <file> <installed script> [fixed args]

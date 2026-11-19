@@ -196,6 +196,25 @@ assert_ok "sync with one invalid file fails" grep -qx "second=failed" "$WORK/out
 assert_ok "no installed file replaced on failure" grep -qx "kept=# old" "$WORK/out.txt"
 assert_ok "no temporary files left behind" grep -qx "leftovers=0" "$WORK/out.txt"
 
+section "common.sh: staged host scripts are installed only on request"
+(
+    new_sandbox; load_common
+    echo "# old" > "$HOME/start-spotify.sh"
+    stage_host_scripts >/dev/null 2>&1 && echo "staged=ok"
+    echo "untouched=$(cat "$HOME/start-spotify.sh")"
+    install_staged_host_scripts && echo "installed=ok"
+    cmp -s "$HOME/start-spotify.sh" "$REPO/src/start-spotify.sh" && echo "content=new"
+    install_staged_host_scripts || echo "nothing-staged=refused"
+    stage_host_scripts >/dev/null 2>&1; discard_staged_host_scripts
+    echo "leftovers=$(find "$HOME" -name '*.staged.*' | wc -l | tr -d ' ')"
+) > "$WORK/out.txt"
+assert_ok "staging succeeds from checkout" grep -qx "staged=ok" "$WORK/out.txt"
+assert_ok "staging does not touch installed scripts" grep -qx "untouched=# old" "$WORK/out.txt"
+assert_ok "staged set is installed" grep -qx "installed=ok" "$WORK/out.txt"
+assert_ok "installed script has the staged content" grep -qx "content=new" "$WORK/out.txt"
+assert_ok "install without a staged set is refused" grep -qx "nothing-staged=refused" "$WORK/out.txt"
+assert_ok "discard removes every staged file" grep -qx "leftovers=0" "$WORK/out.txt"
+
 section "common.sh: stage_guest_bundle"
 (
     new_sandbox; load_common
@@ -259,20 +278,14 @@ out="$(
 assert_eq "a guest-setup.sh without --probe support is never executed" "refused" "$out"
 
 # ==============================================================================
-# Release pinning with a fake GitHub (fake curl serving $SANDBOX/gh/<ref>/<path>)
+# install.sh bootstrap with a fake GitHub (fake curl serving $SANDBOX/gh/<ref>/<path>)
 # ==============================================================================
-make_fake_github() { # <main VERSION> [tag VERSION]
-    local main_ver="$1" tag_ver="${2:-}"
-    mkdir -p "$SANDBOX/gh/main/src"
+make_fake_github() { # <main VERSION>: mirrors the checkout as the main branch
+    local main_ver="$1"
+    mkdir -p "$SANDBOX/gh/main"
+    cp -R "$REPO/src" "$REPO/install.sh" "$REPO/uninstall.sh" "$SANDBOX/gh/main/"
     echo "$main_ver" > "$SANDBOX/gh/main/VERSION"
-    cp "$REPO/src/common.sh" "$SANDBOX/gh/main/src/common.sh"
-    if [ -n "$tag_ver" ]; then
-        mkdir -p "$SANDBOX/gh/v$tag_ver/src"
-        echo "$tag_ver" > "$SANDBOX/gh/v$tag_ver/VERSION"
-        cp "$REPO/src/common.sh" "$SANDBOX/gh/v$tag_ver/src/common.sh"
-        printf '#!/usr/bin/env bash\necho "TAGGED-INSTALLER ref=$SPOTX_REPO_REF args=$*"\n' > "$SANDBOX/gh/v$tag_ver/install.sh"
-    fi
-    cat > "$SANDBOX/fakebin/curl" <<EOF
+    cat > "$SANDBOX/fakebin/curl" <<CURL
 #!/usr/bin/env bash
 out=""; url=""
 while [ \$# -gt 0 ]; do
@@ -283,38 +296,56 @@ while [ \$# -gt 0 ]; do
         *) url="\$1"; shift ;;
     esac
 done
-path="\${url%%\?*}"; path="\${path#https://fake.example/}"
+path="\${url%%\?*}"; path="\${path#https://raw.githubusercontent.com/CupoMeridio/spotx-termux/}"
 [ -f "$SANDBOX/gh/\$path" ] || exit 22
 if [ -n "\$out" ]; then cp "$SANDBOX/gh/\$path" "\$out"; else cat "$SANDBOX/gh/\$path"; fi
-EOF
+CURL
     chmod +x "$SANDBOX/fakebin/curl"
-    export SPOTX_REPO_BASE="https://fake.example"
 }
+run_oneliner() { bash -c "$(cat "$REPO/install.sh")" install.sh "$@" 2>&1 < /dev/null; }
 
-section "common.sh: release pinning"
-out="$(new_sandbox; make_fake_github 2026.12.01 2026.12.01; load_common
-       echo "latest=$(latest_published_version)"
-       use_release_ref 2026.12.01 && echo "ref=$SPOTX_REPO_REF raw=${SPOTX_REPO_RAW#https://fake.example/}")"
-assert_eq "tag present: downloads pinned to it" $'latest=2026.12.01\nref=v2026.12.01 raw=v2026.12.01' "$out"
-out="$(new_sandbox; make_fake_github 2026.12.01; load_common
-       use_release_ref 2026.12.01 || echo "ref=$SPOTX_REPO_REF")"
-assert_eq "tag missing: downloads stay on main" "ref=main" "$out"
-out="$(new_sandbox; make_fake_github "404: Not Found"; load_common; latest_published_version)"
-assert_eq "invalid published VERSION is reported as unknown" "unknown" "$out"
+section "install.sh: one-liner bootstrap"
+out="$(new_sandbox; make_fake_github 2026.12.01; run_oneliner --version)"
+assert_eq "one-liner reports the VERSION published on main" "SpotX-Termux 2026.12.01" "$out"
 
-section "install.sh: bootstrap follows the release tag"
-out="$(new_sandbox; make_fake_github 2026.12.01 2026.12.01; unset SPOTX_REPO_REF
-       bash -c "$(cat "$REPO/install.sh")" install.sh --version 2>&1)"
-assert_eq "one-liner re-runs the installer of the tagged release" "TAGGED-INSTALLER ref=v2026.12.01 args=--version" "$out"
-out="$(new_sandbox; make_fake_github 2026.12.01; unset SPOTX_REPO_REF
-       bash -c "$(cat "$REPO/install.sh")" install.sh --version 2>&1)"
-assert_eq "no tag yet: installs from main as before" "SpotX-Termux 2026.12.01" "$out"
-out="$(new_sandbox; make_fake_github 2026.12.01; unset SPOTX_REPO_REF
+out="$(new_sandbox; make_fake_github 2026.12.01
+       mkdir -p "$HOME/.spotx-termux"; cp "$REPO/src/common.sh" "$HOME/.spotx-termux/"
+       echo "2026.01.01" > "$HOME/.spotx-termux/VERSION"
+       run_oneliner --version)"
+assert_eq "online: an older installed library is not used" "SpotX-Termux 2026.12.01" "$out"
+
+out="$(new_sandbox; make_fake_github 2026.12.01
        printf '#!/usr/bin/env bash\necho "INSTALLED-UNINSTALLER args=$*"\n' > "$HOME/uninstall-spotify.sh"
        chmod +x "$HOME/uninstall-spotify.sh"
-       rm -f "$SANDBOX/gh/main/uninstall.sh"   # GitHub copy unavailable (offline)
-       bash -c "$(cat "$REPO/install.sh")" install.sh --uninstall --full 2>&1)"
-assert_eq "--uninstall prefers the installed uninstaller (works offline)" "INSTALLED-UNINSTALLER args=--full" "$out"
+       rm -f "$SANDBOX/gh/main/uninstall.sh"
+       run_oneliner --uninstall --full)"
+assert_eq "--uninstall prefers the installed uninstaller" "INSTALLED-UNINSTALLER args=--full" "$out"
+
+out="$(new_sandbox; make_fake_github 2026.12.01; rm -rf "$SANDBOX/gh"   # offline
+       mkdir -p "$HOME/.spotx-termux"; cp "$REPO/src/common.sh" "$HOME/.spotx-termux/"
+       printf '#!/usr/bin/env bash\necho "INSTALLED-UNINSTALLER args=$*"\n' > "$HOME/uninstall-spotify.sh"
+       chmod +x "$HOME/uninstall-spotify.sh"
+       run_oneliner --uninstall --full)"
+assert_eq "offline: --uninstall runs on the installed library" "INSTALLED-UNINSTALLER args=--full" "$out"
+
+out="$(new_sandbox; make_fake_github 2026.12.01; rm -rf "$SANDBOX/gh"   # offline
+       mkdir -p "$HOME/.spotx-termux"; cp "$REPO/src/common.sh" "$HOME/.spotx-termux/"
+       run_oneliner; echo "rc=$?")"
+if [[ "$out" == *"Could not download the SpotX-Termux core library"* && "$out" == *"rc=1" ]]; then
+    pass "offline: installation refused with the installed library"
+else
+    fail "offline: installation refused with the installed library" "$out"
+fi
+
+out="$(new_sandbox; make_fake_github 2026.12.01; rm -f "$SANDBOX/gh/main/src/doctor.sh"
+       run_oneliner; echo "rc=$?"
+       echo "leftovers=$(find "$HOME" "$PREFIX/tmp" -name '*.staged.*' -o -name 'spotx-guest' | wc -l | tr -d ' ')")"
+if [[ "$out" == *"Could not download the SpotX-Termux scripts"* && "$out" == *"rc=1"* \
+      && "$out" != *"Checking available storage"* && "$out" == *"leftovers=0"* ]]; then
+    pass "a missing script aborts the installer before any setup step, leaving nothing staged"
+else
+    fail "a missing script aborts the installer before any setup step, leaving nothing staged" "$out"
+fi
 
 # ==============================================================================
 # start-spotify.sh: single-session guard

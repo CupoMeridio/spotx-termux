@@ -27,10 +27,9 @@ GUEST_SETUP_INSTALLED="/usr/local/lib/spotx-termux/guest-setup.sh"
 # Files installed into the container live in src/guest/ in the repository. The host
 # stages them next to this script (<dir>/guest-setup.sh + <dir>/guest/*), mirroring
 # the repo layout. Hosts running an updater that predates src/guest/ stage only this
-# script: in that case the files are downloaded from GitHub, from the release tag the
-# host passes in SPOTX_REPO_REF (hosts that do not pass it get main).
+# script: in that case the files are downloaded from GitHub.
 GUEST_FILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo /nonexistent)/guest"
-GUEST_REPO_RAW="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/${SPOTX_REPO_REF:-main}/src/guest"
+GUEST_REPO_RAW="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main/src/guest"
 
 # ---------------------------------------------------------------------------
 # Helper: resolve latest Spotify version and package path from APT metadata

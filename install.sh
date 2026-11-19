@@ -18,25 +18,7 @@ if [ -n "${BASH_SOURCE[0]:-}" ]; then
 fi
 if [ -z "$_SPOTX_LIB" ]; then
     _bootstrap_dir="${PREFIX:-/data/data/com.termux/files/usr}/tmp"
-    _bootstrap_base="${SPOTX_REPO_BASE:-https://raw.githubusercontent.com/CupoMeridio/spotx-termux}"
-
-    # Release pinning: this copy of install.sh came from main. Install the release
-    # tagged v<VERSION of main> instead, so every file comes from the same immutable
-    # snapshot; the tagged installer runs with SPOTX_REPO_REF set and skips this block.
-    if [ -z "${SPOTX_REPO_REF:-}" ]; then
-        SPOTX_REPO_REF="main"
-        _main_ver="$(curl -fsSL "${_bootstrap_base}/main/VERSION?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)"
-        if [[ "$_main_ver" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]] && \
-           [ "$(curl -fsSL "${_bootstrap_base}/v${_main_ver}/VERSION" 2>/dev/null | tr -d '[:space:]' || true)" = "$_main_ver" ]; then
-            _tagged_installer="$(curl -fsSL "${_bootstrap_base}/v${_main_ver}/install.sh" 2>/dev/null || true)"
-            if [ "${_tagged_installer:0:2}" = "#!" ]; then
-                export SPOTX_REPO_REF="v${_main_ver}"
-                exec bash -c "$_tagged_installer" install.sh "$@"
-            fi
-        fi
-    fi
-    export SPOTX_REPO_REF
-    _bootstrap_raw="${_bootstrap_base}/${SPOTX_REPO_REF}"
+    _bootstrap_raw="https://raw.githubusercontent.com/CupoMeridio/spotx-termux/main"
     mkdir -p "$_bootstrap_dir" 2>/dev/null || true
     _SPOTX_LIB="${_bootstrap_dir}/spotx-common.sh"
     rm -f "$_SPOTX_LIB" "${_bootstrap_dir}/VERSION" 2>/dev/null || true
@@ -48,6 +30,13 @@ if [ -z "$_SPOTX_LIB" ]; then
     # VERSION next to the bootstrap library is what resolve_spotx_version reads first
     curl -fsSL "${_bootstrap_raw}/VERSION?t=$(date +%s)" -o "${_bootstrap_dir}/VERSION" 2>/dev/null \
         || rm -f "${_bootstrap_dir}/VERSION" 2>/dev/null || true
+fi
+# Offline fallback: the installed library is enough for --uninstall / --doctor. It is
+# used only when the download failed: an installation always needs the fresh copy.
+_SPOTX_LIB_OFFLINE=0
+if [ ! -f "$_SPOTX_LIB" ] && [ -f "${HOME:-/data/data/com.termux/files/home}/.spotx-termux/common.sh" ]; then
+    _SPOTX_LIB="${HOME:-/data/data/com.termux/files/home}/.spotx-termux/common.sh"
+    _SPOTX_LIB_OFFLINE=1
 fi
 
 if [ -f "$_SPOTX_LIB" ]; then
@@ -104,6 +93,12 @@ if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
     exit 0
 fi
 
+if [ "$_SPOTX_LIB_OFFLINE" = "1" ] || [ "${SPOTX_LIB_API:-0}" -lt 6 ]; then
+    echo "[X] Error: Could not download the SpotX-Termux core library (network or GitHub error)." >&2
+    echo "    Check your connection and run the installer again." >&2
+    exit 1
+fi
+
 SPOTX_FORCE=0
 for arg in "$@"; do
     case "$arg" in
@@ -127,6 +122,23 @@ echo -e "${CLR}"
 echo -e "${CYAN}Automatic setup of Spotify Desktop + SpotX inside Termux PRoot${CLR}"
 echo -e "${CYAN}Version: ${BOLD}${SPOTX_TERMUX_VERSION}${CLR}"
 echo -e "${CYAN}---------------------------------------------------------------${CLR}\n"
+
+# ------------------------------------------------------------------------------
+# 0. Fetch every project file now, right after the library and VERSION: the setup
+# takes minutes, and fetching later could mix files from different pushes to main.
+# Staged files are installed at the end (guest bundle in step 4, host scripts in 5).
+# ------------------------------------------------------------------------------
+info "Downloading SpotX-Termux scripts..."
+cleanup_staged_files() {
+    remove_guest_bundle
+    discard_staged_host_scripts
+}
+trap cleanup_staged_files EXIT
+if ! stage_guest_bundle || ! stage_host_scripts; then
+    error "Could not download the SpotX-Termux scripts (network or GitHub error)."
+    error "Nothing was changed. Please check your connection and run the installer again."
+    exit 1
+fi
 
 # ------------------------------------------------------------------------------
 # 1. Environment & storage checks
@@ -272,19 +284,9 @@ fi
 # 4. Run guest-setup.sh inside the container (staged through the shared /tmp)
 # ------------------------------------------------------------------------------
 info "Configuring container environment, dependencies, Box64, Spotify, and SpotX..."
-
-if ! stage_guest_bundle; then
-    error "Could not obtain a valid guest setup script (network or GitHub error)."
-    error "Please check your connection and run the installer again."
-    exit 1
-fi
-trap remove_guest_bundle EXIT
-
-info "Executing container guest configuration..."
 proot-distro login "$CONTAINER_NAME" --shared-tmp -- \
     env SPOTX_FORCE="$SPOTX_FORCE" \
         SPOTX_TERMUX_VERSION="$SPOTX_TERMUX_VERSION" \
-        SPOTX_REPO_REF="$SPOTX_REPO_REF" \
         bash "$GUEST_STAGING_IN_CONTAINER"
 remove_guest_bundle
 
@@ -292,9 +294,9 @@ remove_guest_bundle
 # 5. Host scripts, command wrappers and Termux:Widget shortcuts
 # ------------------------------------------------------------------------------
 info "Installing launcher scripts on Termux..."
-if ! sync_host_scripts; then
+if ! install_staged_host_scripts; then
     error "Host scripts could not be installed. The container is ready:"
-    error "re-run the installer when the connection is back (it will be quick)."
+    error "re-run the installer (it will be quick)."
     exit 1
 fi
 install_wrappers
